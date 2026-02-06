@@ -1,0 +1,15 @@
+import { Events } from "discord.js";
+import { client } from "../client.js";
+import { runMigrations } from "../db/migrate.js";
+import { logger } from "../utils/logger.js";
+import { initScheduler } from "../scheduler/index.js";
+
+export function registerReadyEvent(): void {
+  client.once(Events.ClientReady, async (readyClient) => {
+    logger.info(`REI operacional. ${readyClient.user.tag}`);
+
+    await runMigrations();
+
+    await initScheduler(readyClient);
+  });
+}
