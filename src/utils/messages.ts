@@ -22,6 +22,7 @@ export const messages = {
   outsideDeclarationPeriod: () => `Fora do período de declaração.`,
   outsideProductionPeriod: () => `Fora do período de produção.`,
   outsideReviewPeriod: () => `Fora do período de review.`,
+  outsideProductionOrReview: () => `Disponível apenas durante produção ou review.`,
   noCycleActive: () => `Nenhum ciclo ativo.`,
   noProjectDeclared: () => `Nenhum projeto declarado neste ciclo.`,
   assignmentNotFound: () => `Atribuição não encontrada.`,

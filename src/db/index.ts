@@ -11,5 +11,8 @@ const client = createClient({
   url: `file:${env.DATABASE_PATH}`,
 });
 
+await client.execute("PRAGMA journal_mode = WAL");
+await client.execute("PRAGMA busy_timeout = 5000");
+
 export const db = drizzle(client, { schema });
 export { schema };

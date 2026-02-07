@@ -2,6 +2,7 @@ import { Events, MessageFlags } from "discord.js";
 import { client, commands } from "../client.js";
 import { logger } from "../utils/logger.js";
 import { messages } from "../utils/messages.js";
+import { rei } from "../utils/embeds.js";
 
 export function registerInteractionCreateEvent(): void {
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -20,10 +21,11 @@ export function registerInteractionCreateEvent(): void {
         guild: interaction.guildId ?? "DM",
       });
 
+      const embed = rei.error(messages.internalError());
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: messages.internalError(), flags: [MessageFlags.Ephemeral] }).catch(() => {});
+        await interaction.followUp({ embeds: [embed], flags: [MessageFlags.Ephemeral] }).catch(() => {});
       } else {
-        await interaction.reply({ content: messages.internalError(), flags: [MessageFlags.Ephemeral] }).catch(() => {});
+        await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] }).catch(() => {});
       }
     }
   });

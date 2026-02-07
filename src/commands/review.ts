@@ -9,6 +9,7 @@ import {
   getPendingAssignments,
 } from "../services/review.service.js";
 import { messages } from "../utils/messages.js";
+import { rei } from "../utils/embeds.js";
 import { CyclePhase } from "../utils/constants.js";
 import { requireGuild } from "../utils/permissions.js";
 
@@ -19,12 +20,12 @@ export const review: Command = {
     .addSubcommand((sub) =>
       sub
         .setName("enviar")
-        .setDescription("Submeter review de entrega atribuída.")
+        .setDescription("Submeter review de entrega atribuida.")
         .addIntegerOption((opt) =>
-          opt.setName("entrega_id").setDescription("ID da entrega atribuída.").setRequired(true)
+          opt.setName("entrega_id").setDescription("ID da entrega atribuida.").setRequired(true)
         )
         .addStringOption((opt) =>
-          opt.setName("conteudo").setDescription("Conteúdo da review.").setRequired(true).setMaxLength(2000)
+          opt.setName("conteudo").setDescription("Conteudo da review.").setRequired(true).setMaxLength(2000)
         )
     )
     .addSubcommand((sub) =>
@@ -33,7 +34,7 @@ export const review: Command = {
 
   async execute(interaction) {
     if (!requireGuild(interaction)) {
-      await interaction.reply({ content: messages.guildOnly(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.guildOnly())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
@@ -46,28 +47,32 @@ export const review: Command = {
     if (subcommand === "pendentes") {
       const cycle = await cycleService.getActiveCycle(guildId);
       if (!cycle) {
-        await interaction.reply({ content: messages.noCycleActive(), flags: [MessageFlags.Ephemeral] });
+        await interaction.reply({ embeds: [rei.error(messages.noCycleActive())], flags: [MessageFlags.Ephemeral] });
         return;
       }
 
       const pending = await getPendingAssignments(guildId, userId, cycle.id);
       if (pending.length === 0) {
-        await interaction.reply({ content: "Nenhuma review pendente.", flags: [MessageFlags.Ephemeral] });
+        await interaction.reply({
+          embeds: [rei.info("Reviews Pendentes", "Nenhuma review pendente.")],
+          flags: [MessageFlags.Ephemeral],
+        });
         return;
       }
 
-      const lines = pending.map((a) => `- Entrega ID: ${a.deliveryId}`);
-      await interaction.reply({
-        content: `Reviews pendentes:\n${lines.join("\n")}`,
-        flags: [MessageFlags.Ephemeral],
-      });
+      const embed = rei.info("Reviews Pendentes");
+      for (const a of pending) {
+        embed.addFields({ name: `Entrega ${a.deliveryId}`, value: `ID: ${a.deliveryId}`, inline: true });
+      }
+
+      await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     // subcommand === "enviar"
     const cycle = await cycleService.getActiveCycle(guildId);
     if (!cycle || cycle.phase !== CyclePhase.REVIEW) {
-      await interaction.reply({ content: messages.outsideReviewPeriod(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.outsideReviewPeriod())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
@@ -76,18 +81,18 @@ export const review: Command = {
 
     const assignment = await getAssignmentForUserAndDelivery(userId, entregaId);
     if (!assignment) {
-      await interaction.reply({ content: messages.assignmentNotFound(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.assignmentNotFound())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     const existingReview = await getReviewByAssignment(assignment.id);
     if (existingReview) {
-      await interaction.reply({ content: messages.reviewAlreadySubmitted(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.reviewAlreadySubmitted())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     await submitReview(assignment, conteudo);
 
-    await interaction.reply({ content: messages.reviewSubmitted(), flags: [MessageFlags.Ephemeral] });
+    await interaction.reply({ embeds: [rei.success(messages.reviewSubmitted())], flags: [MessageFlags.Ephemeral] });
   },
 };

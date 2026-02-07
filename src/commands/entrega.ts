@@ -5,6 +5,7 @@ import { projectService } from "../services/project.service.js";
 import { deliveryService } from "../services/delivery.service.js";
 import { memberService } from "../services/member.service.js";
 import { messages } from "../utils/messages.js";
+import { rei } from "../utils/embeds.js";
 import { CyclePhase } from "../utils/constants.js";
 import { requireGuild } from "../utils/permissions.js";
 
@@ -26,7 +27,7 @@ export const entrega: Command = {
 
   async execute(interaction) {
     if (!requireGuild(interaction)) {
-      await interaction.reply({ content: messages.guildOnly(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.guildOnly())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
@@ -39,25 +40,25 @@ export const entrega: Command = {
     const arquivo = interaction.options.getAttachment("arquivo");
 
     if (!link && !arquivo) {
-      await interaction.reply({ content: messages.provideInput(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.provideInput())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     const cycle = await cycleService.getActiveCycle(guildId);
     if (!cycle || cycle.phase !== CyclePhase.PRODUCTION) {
-      await interaction.reply({ content: messages.outsideProductionPeriod(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.outsideProductionPeriod())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     const project = await projectService.getByUserAndCycle(guildId, userId, cycle.id);
     if (!project) {
-      await interaction.reply({ content: messages.noProjectDeclared(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.noProjectDeclared())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     const existing = await deliveryService.getByProject(project.id);
     if (existing) {
-      await interaction.reply({ content: messages.deliveryAlreadySubmitted(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.deliveryAlreadySubmitted())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
@@ -70,6 +71,6 @@ export const entrega: Command = {
       arquivo?.url ?? null
     );
 
-    await interaction.reply({ content: messages.deliverySubmitted(), flags: [MessageFlags.Ephemeral] });
+    await interaction.reply({ embeds: [rei.success(messages.deliverySubmitted())], flags: [MessageFlags.Ephemeral] });
   },
 };

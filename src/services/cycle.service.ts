@@ -7,6 +7,8 @@ import { messages } from "../utils/messages.js";
 import { logger } from "../utils/logger.js";
 import { client } from "../client.js";
 import type { TextChannel } from "discord.js";
+import { EmbedBuilder } from "discord.js";
+import { rei } from "../utils/embeds.js";
 
 type Cycle = typeof schema.cycles.$inferSelect;
 type GuildConfig = typeof schema.guilds.$inferSelect;
@@ -39,14 +41,19 @@ async function getGuildConfig(guildId: string): Promise<GuildConfig | undefined>
   return rows[0];
 }
 
-async function announce(guildId: string, message: string): Promise<void> {
+async function announce(guildId: string, content: string | EmbedBuilder | EmbedBuilder[]): Promise<void> {
   const config = await getGuildConfig(guildId);
   if (!config?.announcementChannelId) return;
 
   try {
     const channel = await client.channels.fetch(config.announcementChannelId);
     if (channel?.isTextBased()) {
-      await (channel as TextChannel).send(message);
+      if (typeof content === "string") {
+        await (channel as TextChannel).send(content);
+      } else {
+        const embeds = Array.isArray(content) ? content : [content];
+        await (channel as TextChannel).send({ embeds });
+      }
     }
   } catch (error) {
     logger.error("Falha ao enviar anuncio.", { guildId, error: String(error) });
@@ -88,7 +95,8 @@ async function openCycle(guildId: string): Promise<Cycle | null> {
     payload: { cycleNumber, deadlines },
   });
 
-  await announce(guildId, messages.cycleOpened(cycleNumber, formatShort(deadlines.declarationDeadline)));
+  await announce(guildId, rei.announcement(`Ciclo ${cycleNumber} Iniciado`)
+    .addFields({ name: "Declaracoes abertas ate", value: formatShort(deadlines.declarationDeadline) }));
 
   logger.info("Ciclo aberto.", { guildId, cycleNumber, cycleId: cycle.id });
   return cycle;
@@ -113,7 +121,8 @@ async function closeDeclaration(cycleId: number): Promise<void> {
     payload: { projectCount: projects.length },
   });
 
-  await announce(cycle.guildId, messages.declarationClosed(projects.length));
+  await announce(cycle.guildId, rei.announcement("Declaracao Encerrada",
+    `Periodo de declaracao encerrado. ${projects.length} projetos registrados.`));
   logger.info("Declaracoes encerradas.", { cycleId, projects: projects.length });
 }
 
@@ -132,7 +141,7 @@ async function startReviewPhase(cycleId: number): Promise<void> {
       .set({ phase: CyclePhase.REVIEW })
       .where(eq(schema.cycles.id, cycleId));
 
-    await announce(cycle.guildId, messages.noDeliveries());
+    await announce(cycle.guildId, rei.announcement("Fase de Review", messages.noDeliveries()));
     logger.info("Sem entregas. Review ignorada.", { cycleId });
     return;
   }
@@ -145,7 +154,7 @@ async function startReviewPhase(cycleId: number): Promise<void> {
   const { assignReviewers } = await import("./review.service.js");
   await assignReviewers(cycle.guildId, cycleId);
 
-  await announce(cycle.guildId, messages.reviewPhaseStarted());
+  await announce(cycle.guildId, rei.announcement("Fase de Review Iniciada", "Entregas atribuidas."));
   logger.info("Fase de review iniciada.", { cycleId });
 }
 
@@ -164,15 +173,15 @@ async function closeCycle(cycleId: number): Promise<void> {
   for (const change of changes) {
     const msg =
       change.newState === "observer" ? messages.stateToObserver() : messages.stateToActive();
-    await announce(cycle.guildId, `<@${change.userId}>: ${msg}`);
+    await announce(cycle.guildId, rei.stateChange(`<@${change.userId}>: ${msg}`));
   }
 
   const { generateWeeklyReport } = await import("./report.service.js");
-  const report = await generateWeeklyReport(cycleId);
-  await announce(cycle.guildId, report);
+  const reportEmbed = await generateWeeklyReport(cycleId);
+  await announce(cycle.guildId, reportEmbed);
 
   await logEvent(cycle.guildId, EventType.CYCLE_CLOSED, { cycleId });
-  await announce(cycle.guildId, messages.cycleClosed(cycle.cycleNumber));
+  await announce(cycle.guildId, rei.announcement(`Ciclo ${cycle.cycleNumber} Encerrado`));
   logger.info("Ciclo encerrado.", { cycleId, cycleNumber: cycle.cycleNumber });
 }
 
@@ -194,7 +203,8 @@ async function sendReminder(cycleId: number): Promise<void> {
   const pending = projects.filter((p) => !deliveredUserIds.has(p.userId)).length;
 
   await logEvent(cycle.guildId, EventType.REMINDER_SENT, { cycleId, payload: { pending } });
-  await announce(cycle.guildId, messages.reminder48h(cycle.cycleNumber, pending));
+  await announce(cycle.guildId, rei.announcement(`Lembrete -- Ciclo ${cycle.cycleNumber}`,
+    `48 horas para encerramento. ${pending} entregas pendentes.`));
   logger.info("Lembrete enviado.", { cycleId, pending });
 }
 

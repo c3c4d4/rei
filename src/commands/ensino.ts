@@ -4,6 +4,7 @@ import { cycleService } from "../services/cycle.service.js";
 import { teachbackService } from "../services/teachback.service.js";
 import { memberService } from "../services/member.service.js";
 import { messages } from "../utils/messages.js";
+import { rei } from "../utils/embeds.js";
 import { CyclePhase } from "../utils/constants.js";
 import { requireGuild } from "../utils/permissions.js";
 
@@ -14,18 +15,18 @@ export const ensino: Command = {
     .addSubcommand((sub) =>
       sub
         .setName("registrar")
-        .setDescription("Registrar micro-explicação.")
+        .setDescription("Registrar micro-explicacao.")
         .addStringOption((opt) =>
-          opt.setName("topico").setDescription("Tópico da explicação.").setRequired(true).setMaxLength(100)
+          opt.setName("topico").setDescription("Topico da explicacao.").setRequired(true).setMaxLength(100)
         )
         .addStringOption((opt) =>
-          opt.setName("conteudo").setDescription("Conteúdo da explicação.").setRequired(true).setMaxLength(2000)
+          opt.setName("conteudo").setDescription("Conteudo da explicacao.").setRequired(true).setMaxLength(2000)
         )
     ),
 
   async execute(interaction) {
     if (!requireGuild(interaction)) {
-      await interaction.reply({ content: messages.guildOnly(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.guildOnly())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
@@ -36,18 +37,18 @@ export const ensino: Command = {
 
     const cycle = await cycleService.getActiveCycle(guildId);
     if (!cycle || cycle.phase === CyclePhase.CLOSED) {
-      await interaction.reply({ content: messages.noCycleActive(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.noCycleActive())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     if (cycle.phase !== CyclePhase.PRODUCTION && cycle.phase !== CyclePhase.REVIEW) {
-      await interaction.reply({ content: messages.noCycleActive(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.outsideProductionOrReview())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
     const existing = await teachbackService.getByUserAndCycle(guildId, userId, cycle.id);
     if (existing) {
-      await interaction.reply({ content: messages.teachbackAlreadyRegistered(), flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds: [rei.error(messages.teachbackAlreadyRegistered())], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
@@ -56,6 +57,6 @@ export const ensino: Command = {
 
     await teachbackService.register(guildId, userId, cycle.id, topico, conteudo);
 
-    await interaction.reply({ content: messages.teachbackRegistered(topico), flags: [MessageFlags.Ephemeral] });
+    await interaction.reply({ embeds: [rei.success(messages.teachbackRegistered(topico))], flags: [MessageFlags.Ephemeral] });
   },
 };
