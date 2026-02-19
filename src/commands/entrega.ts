@@ -21,7 +21,16 @@ export const entrega: Command = {
           opt.setName("link").setDescription("Link para o artefato.").setRequired(false)
         )
         .addAttachmentOption((opt) =>
-          opt.setName("arquivo").setDescription("Arquivo do artefato.").setRequired(false)
+          opt.setName("arquivo1").setDescription("Arquivo do artefato.").setRequired(false)
+        )
+        .addAttachmentOption((opt) =>
+          opt.setName("arquivo2").setDescription("Segundo arquivo (opcional).").setRequired(false)
+        )
+        .addAttachmentOption((opt) =>
+          opt.setName("arquivo3").setDescription("Terceiro arquivo (opcional).").setRequired(false)
+        )
+        .addAttachmentOption((opt) =>
+          opt.setName("arquivo4").setDescription("Quarto arquivo (opcional).").setRequired(false)
         )
     ),
 
@@ -37,9 +46,14 @@ export const entrega: Command = {
     await memberService.getOrCreateMember(guildId, userId);
 
     const link = interaction.options.getString("link");
-    const arquivo = interaction.options.getAttachment("arquivo");
+    const attachments = [
+      interaction.options.getAttachment("arquivo1"),
+      interaction.options.getAttachment("arquivo2"),
+      interaction.options.getAttachment("arquivo3"),
+      interaction.options.getAttachment("arquivo4"),
+    ].filter((a): a is NonNullable<typeof a> => a !== null);
 
-    if (!link && !arquivo) {
+    if (!link && attachments.length === 0) {
       await interaction.reply({ embeds: [rei.error(messages.provideInput())], flags: [MessageFlags.Ephemeral] });
       return;
     }
@@ -62,13 +76,14 @@ export const entrega: Command = {
       return;
     }
 
+    const attachmentUrls = attachments.map((a) => a.url);
     await deliveryService.submit(
       guildId,
       userId,
       cycle.id,
       project.id,
       link,
-      arquivo?.url ?? null
+      attachmentUrls.length > 0 ? attachmentUrls : null
     );
 
     await interaction.reply({ embeds: [rei.success(messages.deliverySubmitted())], flags: [MessageFlags.Ephemeral] });

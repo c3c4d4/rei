@@ -17,10 +17,10 @@ export const projeto: Command = {
         .setName("declarar")
         .setDescription("Declarar projeto para o ciclo atual.")
         .addStringOption((opt) =>
-          opt.setName("titulo").setDescription("Titulo do projeto.").setRequired(true).setMaxLength(100)
+          opt.setName("titulo").setDescription("Título do projeto.").setRequired(true).setMaxLength(100)
         )
         .addStringOption((opt) =>
-          opt.setName("descricao").setDescription("Descricao breve.").setRequired(true).setMaxLength(500)
+          opt.setName("descricao").setDescription("Descrição breve.").setRequired(true).setMaxLength(500)
         )
         .addStringOption((opt) =>
           opt.setName("artefato").setDescription("Artefato esperado.").setRequired(true).setMaxLength(200)
@@ -57,9 +57,28 @@ export const projeto: Command = {
       }
 
       const embed = rei.info(`Projetos -- Ciclo ${cycle.cycleNumber}`, `${projects.length} projetos declarados.`);
+      const guild = interaction.guild;
+      if (!guild) {
+        await interaction.reply({ embeds: [rei.error(messages.internalError())], flags: [MessageFlags.Ephemeral] });
+        return;
+      }
+
+      const userIds = [...new Set(projects.map((p) => p.userId))];
+      const displayNames = new Map<string, string>();
+
+      await Promise.all(
+        userIds.map(async (id) => {
+          const guildMember = await guild.members.fetch(id).catch(() => null);
+          if (guildMember) {
+            displayNames.set(id, guildMember.displayName);
+          }
+        })
+      );
+
       for (const p of projects) {
+        const ownerLabel = displayNames.get(p.userId) ?? `<@${p.userId}>`;
         embed.addFields({
-          name: `<@${p.userId}>`,
+          name: ownerLabel,
           value: `**${p.title}**\n${p.description}\nArtefato: ${p.expectedArtifact}`,
           inline: false,
         });

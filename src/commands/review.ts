@@ -7,6 +7,7 @@ import {
   getReviewByAssignment,
   submitReview,
   getPendingAssignments,
+  getReceivedReviews,
 } from "../services/review.service.js";
 import { messages } from "../utils/messages.js";
 import { rei } from "../utils/embeds.js";
@@ -16,20 +17,23 @@ import { requireGuild } from "../utils/permissions.js";
 export const review: Command = {
   data: new SlashCommandBuilder()
     .setName("review")
-    .setDescription("Gerenciamento de reviews.")
+    .setDescription("Gerenciamento de revisões.")
     .addSubcommand((sub) =>
       sub
         .setName("enviar")
-        .setDescription("Submeter review de entrega atribuida.")
+        .setDescription("Enviar revisão de entrega atribuída.")
         .addIntegerOption((opt) =>
-          opt.setName("entrega_id").setDescription("ID da entrega atribuida.").setRequired(true)
+          opt.setName("entrega_id").setDescription("ID da entrega atribuída.").setRequired(true)
         )
         .addStringOption((opt) =>
-          opt.setName("conteudo").setDescription("Conteudo da review.").setRequired(true).setMaxLength(2000)
+          opt.setName("conteudo").setDescription("Conteúdo da revisão.").setRequired(true).setMaxLength(2000)
         )
     )
     .addSubcommand((sub) =>
-      sub.setName("pendentes").setDescription("Listar reviews pendentes.")
+      sub.setName("pendentes").setDescription("Listar revisões pendentes.")
+    )
+    .addSubcommand((sub) =>
+      sub.setName("recebidas").setDescription("Ver revisões recebidas sobre sua entrega.")
     ),
 
   async execute(interaction) {
@@ -44,6 +48,33 @@ export const review: Command = {
 
     await memberService.getOrCreateMember(guildId, userId);
 
+    if (subcommand === "recebidas") {
+      const cycle = await cycleService.getActiveCycle(guildId);
+      if (!cycle) {
+        await interaction.reply({ embeds: [rei.error(messages.noCycleActive())], flags: [MessageFlags.Ephemeral] });
+        return;
+      }
+
+      const reviews = await getReceivedReviews(guildId, userId, cycle.id);
+      if (reviews.length === 0) {
+        await interaction.reply({
+          embeds: [rei.info("Revisões Recebidas", "Nenhuma revisão recebida ainda.")],
+          flags: [MessageFlags.Ephemeral],
+        });
+        return;
+      }
+
+      const embeds = [rei.info("Revisões Recebidas", `${reviews.length} revisão(ões) sobre sua entrega.`)];
+      for (let i = 0; i < reviews.length; i++) {
+        embeds.push(
+          rei.info(`Revisão ${i + 1}`).setDescription(reviews[i].content)
+        );
+      }
+
+      await interaction.reply({ embeds, flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+
     if (subcommand === "pendentes") {
       const cycle = await cycleService.getActiveCycle(guildId);
       if (!cycle) {
@@ -54,18 +85,36 @@ export const review: Command = {
       const pending = await getPendingAssignments(guildId, userId, cycle.id);
       if (pending.length === 0) {
         await interaction.reply({
-          embeds: [rei.info("Reviews Pendentes", "Nenhuma review pendente.")],
+          embeds: [rei.info("Revisões Pendentes", "Nenhuma revisão pendente.")],
           flags: [MessageFlags.Ephemeral],
         });
         return;
       }
 
-      const embed = rei.info("Reviews Pendentes");
-      for (const a of pending) {
-        embed.addFields({ name: `Entrega ${a.deliveryId}`, value: `ID: ${a.deliveryId}`, inline: true });
+      const embeds = [rei.info("Revisões Pendentes", `${pending.length} entrega(s) para revisar.`)];
+      for (const { assignment, delivery, project } of pending) {
+        const lines: string[] = [
+          `**Projeto:** ${project.title}`,
+          `**Descrição:** ${project.description}`,
+          `**Artefato esperado:** ${project.expectedArtifact}`,
+        ];
+        if (delivery.link) lines.push(`**Link:** ${delivery.link}`);
+        if (delivery.attachmentUrl) {
+          try {
+            const urls: string[] = JSON.parse(delivery.attachmentUrl);
+            urls.forEach((url, i) => lines.push(`**Anexo ${urls.length > 1 ? i + 1 : ""}:** ${url}`));
+          } catch {
+            lines.push(`**Anexo:** ${delivery.attachmentUrl}`);
+          }
+        }
+
+        embeds.push(
+          rei.info(`Entrega ${delivery.id}`).setDescription(lines.join("\n"))
+            .setFooter({ text: `Use /review enviar entrega_id:${delivery.id} conteudo:<sua revisão>` })
+        );
       }
 
-      await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
+      await interaction.reply({ embeds, flags: [MessageFlags.Ephemeral] });
       return;
     }
 
@@ -79,7 +128,7 @@ export const review: Command = {
     const entregaId = interaction.options.getInteger("entrega_id", true);
     const conteudo = interaction.options.getString("conteudo", true);
 
-    const assignment = await getAssignmentForUserAndDelivery(userId, entregaId);
+    const assignment = await getAssignmentForUserAndDelivery(guildId, cycle.id, userId, entregaId);
     if (!assignment) {
       await interaction.reply({ embeds: [rei.error(messages.assignmentNotFound())], flags: [MessageFlags.Ephemeral] });
       return;

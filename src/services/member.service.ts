@@ -15,13 +15,16 @@ async function getOrCreateMember(guildId: string, userId: string): Promise<Membe
 
   if (rows.length > 0) return rows[0];
 
-  await db.insert(schema.members).values({
-    guildId,
-    userId,
-    state: MemberState.ACTIVE,
-    consecutiveFailedCycles: 0,
-    joinedAt: now(),
-  });
+  await db
+    .insert(schema.members)
+    .values({
+      guildId,
+      userId,
+      state: MemberState.ACTIVE,
+      consecutiveFailedCycles: 0,
+      joinedAt: now(),
+    })
+    .onConflictDoNothing();
 
   const created = await db
     .select()
@@ -93,7 +96,11 @@ async function transitionState(
 ): Promise<void> {
   await db
     .update(schema.members)
-    .set({ state: newState, lastActiveAt: now() })
+    .set({
+      state: newState,
+      lastActiveAt: now(),
+      consecutiveFailedCycles: newState === MemberState.ACTIVE ? 0 : member.consecutiveFailedCycles,
+    })
     .where(eq(schema.members.id, member.id));
 
   await db.insert(schema.memberStateHistory).values({
@@ -145,7 +152,7 @@ async function evaluateAllMembers(
 
         if (newFailed >= CONSECUTIVE_FAIL_LIMIT) {
           await transitionState(
-            member,
+            { ...member, consecutiveFailedCycles: newFailed },
             MemberState.OBSERVER,
             "2 ciclos consecutivos sem cumprir requisitos mínimos.",
             cycleId

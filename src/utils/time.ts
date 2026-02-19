@@ -1,3 +1,5 @@
+const BRASILIA_TIMEZONE = "America/Sao_Paulo";
+
 export function now(): string {
   return new Date().toISOString();
 }
@@ -23,20 +25,23 @@ export function msUntil(iso: string): number {
 }
 
 export function formatShort(iso: string): string {
-  const d = new Date(iso);
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const hours = String(d.getHours()).padStart(2, "0");
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  return `${day}/${month} ${hours}:${minutes}`;
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BRASILIA_TIMEZONE,
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
 }
 
 export function formatDate(iso: string): string {
-  const d = new Date(iso);
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day}/${month}/${year}`;
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BRASILIA_TIMEZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(iso));
 }
 
 export function calculateDeadlines(

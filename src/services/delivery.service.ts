@@ -24,7 +24,7 @@ async function submit(
   cycleId: number,
   projectId: number,
   link: string | null,
-  attachmentUrl: string | null
+  attachmentUrls: string[] | null
 ): Promise<Delivery> {
   await db.insert(schema.deliveries).values({
     projectId,
@@ -32,7 +32,7 @@ async function submit(
     guildId,
     userId,
     link,
-    attachmentUrl,
+    attachmentUrl: attachmentUrls ? JSON.stringify(attachmentUrls) : null,
     submittedAt: now(),
   });
 

@@ -9,9 +9,25 @@ import { client } from "../client.js";
 import type { TextChannel } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 import { rei } from "../utils/embeds.js";
+import { discordScheduledEventService } from "./discord-scheduled-event.service.js";
 
 type Cycle = typeof schema.cycles.$inferSelect;
 type GuildConfig = typeof schema.guilds.$inferSelect;
+
+async function hasPendingReviewAssignments(cycleId: number): Promise<boolean> {
+  const pending = await db
+    .select({ id: schema.reviewAssignments.id })
+    .from(schema.reviewAssignments)
+    .where(
+      and(
+        eq(schema.reviewAssignments.cycleId, cycleId),
+        eq(schema.reviewAssignments.completed, false)
+      )
+    )
+    .limit(1);
+
+  return pending.length > 0;
+}
 
 async function getActiveCycle(guildId: string): Promise<Cycle | undefined> {
   const rows = await db
@@ -56,20 +72,20 @@ async function announce(guildId: string, content: string | EmbedBuilder | EmbedB
       }
     }
   } catch (error) {
-    logger.error("Falha ao enviar anuncio.", { guildId, error: String(error) });
+    logger.error("Falha ao enviar anúncio.", { guildId, error: String(error) });
   }
 }
 
 async function openCycle(guildId: string): Promise<Cycle | null> {
   const existing = await getActiveCycle(guildId);
   if (existing) {
-    logger.warn("Ciclo ja ativo.", { guildId, cycleId: existing.id });
+    logger.warn("Ciclo já ativo.", { guildId, cycleId: existing.id });
     return null;
   }
 
   const config = await getGuildConfig(guildId);
   if (!config) {
-    logger.error("Guild nao configurada.", { guildId });
+    logger.error("Guild não configurada.", { guildId });
     return null;
   }
 
@@ -95,10 +111,11 @@ async function openCycle(guildId: string): Promise<Cycle | null> {
     payload: { cycleNumber, deadlines },
   });
 
-  await announce(guildId, rei.announcement(`Ciclo ${cycleNumber} Iniciado`)
-    .addFields({ name: "Declaracoes abertas ate", value: formatShort(deadlines.declarationDeadline) }));
+  await announce(guildId, rei.announcement(`Ciclo ${cycleNumber} iniciado`)
+    .addFields({ name: "Declarações abertas até", value: `${formatShort(deadlines.declarationDeadline)} (Brasília)` }));
 
   logger.info("Ciclo aberto.", { guildId, cycleNumber, cycleId: cycle.id });
+  await discordScheduledEventService.syncCycleScheduledEvents(cycle);
   return cycle;
 }
 
@@ -121,9 +138,14 @@ async function closeDeclaration(cycleId: number): Promise<void> {
     payload: { projectCount: projects.length },
   });
 
-  await announce(cycle.guildId, rei.announcement("Declaracao Encerrada",
-    `Periodo de declaracao encerrado. ${projects.length} projetos registrados.`));
-  logger.info("Declaracoes encerradas.", { cycleId, projects: projects.length });
+  await announce(cycle.guildId, rei.announcement("Declaração Encerrada",
+    `Período de declaração encerrado. ${projects.length} projetos registrados.`));
+  logger.info("Declarações encerradas.", { cycleId, projects: projects.length });
+
+  const updated = await getCycleById(cycleId);
+  if (updated) {
+    await discordScheduledEventService.syncCycleScheduledEvents(updated);
+  }
 }
 
 async function startReviewPhase(cycleId: number): Promise<void> {
@@ -141,8 +163,15 @@ async function startReviewPhase(cycleId: number): Promise<void> {
       .set({ phase: CyclePhase.REVIEW })
       .where(eq(schema.cycles.id, cycleId));
 
-    await announce(cycle.guildId, rei.announcement("Fase de Review", messages.noDeliveries()));
-    logger.info("Sem entregas. Review ignorada.", { cycleId });
+    await announce(cycle.guildId, rei.announcement("Fase de revisão", messages.noDeliveries()));
+    logger.info("Sem entregas. Revisão ignorada.", { cycleId });
+
+    const updated = await getCycleById(cycleId);
+    if (updated) {
+      await discordScheduledEventService.syncCycleScheduledEvents(updated);
+    }
+
+    await maybeCloseReviewCycleIfNoPending(cycleId);
     return;
   }
 
@@ -154,13 +183,76 @@ async function startReviewPhase(cycleId: number): Promise<void> {
   const { assignReviewers } = await import("./review.service.js");
   await assignReviewers(cycle.guildId, cycleId);
 
-  await announce(cycle.guildId, rei.announcement("Fase de Review Iniciada", "Entregas atribuidas."));
-  logger.info("Fase de review iniciada.", { cycleId });
+  await announce(cycle.guildId, rei.announcement("Fase de revisão iniciada", "Entregas atribuídas."));
+  logger.info("Fase de revisão iniciada.", { cycleId });
+
+  const updated = await getCycleById(cycleId);
+  if (updated) {
+    await discordScheduledEventService.syncCycleScheduledEvents(updated);
+  }
+
+  await maybeCloseReviewCycleIfNoPending(cycleId);
+}
+
+async function sendDailyPendingReviewsReminder(cycleId: number): Promise<void> {
+  const cycle = await getCycleById(cycleId);
+  if (!cycle || cycle.phase !== CyclePhase.REVIEW) return;
+
+  const { getPendingReviewerCounts } = await import("./review.service.js");
+  const pendingReviewers = await getPendingReviewerCounts(cycle.guildId, cycle.id);
+  if (pendingReviewers.length === 0) {
+    logger.info("Lembrete diário sem pendências de revisão.", {
+      cycleId: cycle.id,
+      guildId: cycle.guildId,
+    });
+    return;
+  }
+
+  const mentions = pendingReviewers.map((item) => `<@${item.userId}>`).join(" ");
+  const pendingAssignments = pendingReviewers.reduce((acc, item) => acc + item.pendingCount, 0);
+
+  await logEvent(cycle.guildId, EventType.REMINDER_SENT, {
+    cycleId: cycle.id,
+    payload: {
+      type: "daily_review_pending",
+      pendingReviewers: pendingReviewers.length,
+      pendingAssignments,
+    },
+  });
+
+  await announce(
+    cycle.guildId,
+    `${mentions}\n${messages.dailyReviewReminder(cycle.cycleNumber, pendingReviewers.length)}`
+  );
+
+  logger.info("Lembrete diário de revisões pendentes enviado.", {
+    cycleId: cycle.id,
+    guildId: cycle.guildId,
+    pendingReviewers: pendingReviewers.length,
+    pendingAssignments,
+  });
+}
+
+async function maybeCloseReviewCycleIfNoPending(cycleId: number): Promise<void> {
+  const cycle = await getCycleById(cycleId);
+  if (!cycle || cycle.phase !== CyclePhase.REVIEW) return;
+
+  const hasPending = await hasPendingReviewAssignments(cycleId);
+  if (hasPending) return;
+
+  logger.info("Nenhuma revisão pendente. Encerrando ciclo automaticamente.", {
+    cycleId: cycle.id,
+    guildId: cycle.guildId,
+  });
+
+  await closeCycle(cycleId);
 }
 
 async function closeCycle(cycleId: number): Promise<void> {
   const cycle = await getCycleById(cycleId);
   if (!cycle || cycle.phase === CyclePhase.CLOSED) return;
+
+  const hasPendingReviews = await hasPendingReviewAssignments(cycleId);
 
   await db
     .update(schema.cycles)
@@ -182,6 +274,21 @@ async function closeCycle(cycleId: number): Promise<void> {
 
   await logEvent(cycle.guildId, EventType.CYCLE_CLOSED, { cycleId });
   await announce(cycle.guildId, rei.announcement(`Ciclo ${cycle.cycleNumber} Encerrado`));
+  await discordScheduledEventService.deleteCycleScheduledEvents(cycle.guildId, cycleId);
+
+  if (!hasPendingReviews) {
+    const nextCycle = await openCycle(cycle.guildId);
+    if (nextCycle) {
+      const { rescheduleGuild } = await import("../scheduler/index.js");
+      await rescheduleGuild(cycle.guildId);
+      logger.info("Novo ciclo iniciado automaticamente.", {
+        guildId: cycle.guildId,
+        previousCycleId: cycleId,
+        newCycleId: nextCycle.id,
+      });
+    }
+  }
+
   logger.info("Ciclo encerrado.", { cycleId, cycleNumber: cycle.cycleNumber });
 }
 
@@ -204,7 +311,7 @@ async function sendReminder(cycleId: number): Promise<void> {
 
   await logEvent(cycle.guildId, EventType.REMINDER_SENT, { cycleId, payload: { pending } });
   await announce(cycle.guildId, rei.announcement(`Lembrete -- Ciclo ${cycle.cycleNumber}`,
-    `48 horas para encerramento. ${pending} entregas pendentes.`));
+    `48 horas para encerramento (${formatShort(cycle.reviewDeadline)} de Brasília). ${pending} entregas pendentes.`));
   logger.info("Lembrete enviado.", { cycleId, pending });
 }
 
@@ -215,6 +322,8 @@ export const cycleService = {
   openCycle,
   closeDeclaration,
   startReviewPhase,
+  sendDailyPendingReviewsReminder,
+  maybeCloseReviewCycleIfNoPending,
   closeCycle,
   sendReminder,
   announce,

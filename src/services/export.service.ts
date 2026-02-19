@@ -1,13 +1,45 @@
 import { db, schema } from "../db/index.js";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lt } from "drizzle-orm";
+
+const BRASILIA_TIMEZONE = "America/Sao_Paulo";
+const BRASILIA_UTC_OFFSET_HOURS = 3;
+
+function formatDateBrasilia(iso: string): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: BRASILIA_TIMEZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(iso));
+}
+
+function brasiliaLocalToUtcIso(
+  year: number,
+  monthZeroBased: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0
+): string {
+  const utcMs = Date.UTC(
+    year,
+    monthZeroBased,
+    day,
+    hour + BRASILIA_UTC_OFFSET_HOURS,
+    minute,
+    second
+  );
+
+  return new Date(utcMs).toISOString();
+}
 
 export async function generateMonthlyExport(
   guildId: string,
   year: number,
   month: number
 ): Promise<string> {
-  const startOfMonth = new Date(year, month - 1, 1).toISOString();
-  const endOfMonth = new Date(year, month, 0, 23, 59, 59).toISOString();
+  const startOfMonth = brasiliaLocalToUtcIso(year, month - 1, 1, 0, 0, 0);
+  const endOfMonthExclusive = brasiliaLocalToUtcIso(year, month, 1, 0, 0, 0);
 
   const cycles = await db
     .select()
@@ -16,14 +48,14 @@ export async function generateMonthlyExport(
       and(
         eq(schema.cycles.guildId, guildId),
         gte(schema.cycles.startedAt, startOfMonth),
-        lte(schema.cycles.startedAt, endOfMonth)
+        lt(schema.cycles.startedAt, endOfMonthExclusive)
       )
     );
 
   if (cycles.length === 0) return `Nenhum ciclo encontrado em ${month}/${year}.`;
 
   const monthNames = [
-    "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
   ];
 
@@ -41,17 +73,17 @@ export async function generateMonthlyExport(
       .from(schema.memberStateHistory)
       .where(eq(schema.memberStateHistory.cycleId, cycle.id));
 
-    const startDate = new Date(cycle.startedAt).toLocaleDateString("pt-BR");
+    const startDate = formatDateBrasilia(cycle.startedAt);
     const endDate = cycle.closedAt
-      ? new Date(cycle.closedAt).toLocaleDateString("pt-BR")
-      : new Date(cycle.reviewDeadline).toLocaleDateString("pt-BR");
+      ? formatDateBrasilia(cycle.closedAt)
+      : formatDateBrasilia(cycle.reviewDeadline);
 
     lines.push(`## Ciclo ${cycle.cycleNumber} (${startDate} - ${endDate})`);
     lines.push("");
 
     if (projects.length > 0) {
       lines.push("### Projetos Declarados");
-      lines.push("| Membro | Titulo | Artefato Esperado |");
+      lines.push("| Membro | Título | Artefato Esperado |");
       lines.push("|--------|--------|-------------------|");
       for (const p of projects) {
         lines.push(`| ${p.userId} | ${p.title} | ${p.expectedArtifact} |`);
@@ -65,26 +97,37 @@ export async function generateMonthlyExport(
       lines.push("|--------|---------|------|");
       for (const d of deliveries) {
         const proj = projects.find((p) => p.id === d.projectId);
-        lines.push(`| ${d.userId} | ${proj?.title ?? "?"} | ${d.link ?? d.attachmentUrl ?? "-"} |`);
+        let artefato = d.link ?? "-";
+        if (d.attachmentUrl) {
+          try {
+            const urls: string[] = JSON.parse(d.attachmentUrl);
+            artefato = artefato === "-" ? urls.join(", ") : `${artefato}, ${urls.join(", ")}`;
+          } catch {
+            artefato = artefato === "-" ? d.attachmentUrl : `${artefato}, ${d.attachmentUrl}`;
+          }
+        }
+        lines.push(`| ${d.userId} | ${proj?.title ?? "?"} | ${artefato} |`);
       }
       lines.push("");
     }
 
     if (reviews.length > 0) {
-      lines.push("### Reviews");
-      lines.push("| Revisor | Projeto Revisado |");
-      lines.push("|---------|-----------------|");
+      lines.push("### Revisões");
+      lines.push("| Revisor | Quantidade |");
+      lines.push("|---------|-----------|");
+      const reviewerMap = new Map<string, number>();
       for (const r of reviews) {
-        const delivery = deliveries.find((d) => d.id === r.deliveryId);
-        const proj = delivery ? projects.find((p) => p.id === delivery.projectId) : undefined;
-        lines.push(`| ${r.reviewerUserId} | ${proj?.title ?? "?"} |`);
+        reviewerMap.set(r.reviewerUserId, (reviewerMap.get(r.reviewerUserId) ?? 0) + 1);
+      }
+      for (const [userId, count] of reviewerMap) {
+        lines.push(`| ${userId} | ${count} |`);
       }
       lines.push("");
     }
 
     if (teachbackRows.length > 0) {
       lines.push("### Ensinos");
-      lines.push("| Membro | Topico |");
+      lines.push("| Membro | Tópico |");
       lines.push("|--------|--------|");
       for (const t of teachbackRows) {
         lines.push(`| ${t.userId} | ${t.topic} |`);
@@ -93,7 +136,7 @@ export async function generateMonthlyExport(
     }
 
     if (stateChanges.length > 0) {
-      lines.push("### Alteracoes de Estado");
+      lines.push("### Alterações de Estado");
       lines.push("| Membro | De | Para | Motivo |");
       lines.push("|--------|----|------|--------|");
       for (const s of stateChanges) {

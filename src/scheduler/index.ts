@@ -7,6 +7,68 @@ import { CyclePhase } from "../utils/constants.js";
 import { isPast, addHours } from "../utils/time.js";
 import { logger } from "../utils/logger.js";
 import { now } from "../utils/time.js";
+import { discordScheduledEventService } from "../services/discord-scheduled-event.service.js";
+
+const BRASILIA_UTC_OFFSET_HOURS = 3;
+const DAILY_REVIEW_REMINDER_HOUR_BRASILIA = 16;
+
+function getBrasiliaDateFromUtc(date: Date): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value ?? "0");
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? "0");
+  const day = Number(parts.find((part) => part.type === "day")?.value ?? "0");
+  return { year, month, day };
+}
+
+function brasiliaWallClockToUtcIso(
+  year: number,
+  month: number,
+  day: number,
+  hour: number
+): string {
+  return new Date(
+    Date.UTC(year, month - 1, day, hour + BRASILIA_UTC_OFFSET_HOURS, 0, 0, 0)
+  ).toISOString();
+}
+
+function scheduleDailyReviewReminders(guildId: string, cycle: typeof schema.cycles.$inferSelect): void {
+  const reviewStart = new Date(cycle.productionDeadline);
+  const reviewEnd = new Date(cycle.reviewDeadline);
+  const startDate = getBrasiliaDateFromUtc(reviewStart);
+  const cursor = new Date(Date.UTC(startDate.year, startDate.month - 1, startDate.day));
+  let reminderIndex = 1;
+
+  while (true) {
+    const year = cursor.getUTCFullYear();
+    const month = cursor.getUTCMonth() + 1;
+    const day = cursor.getUTCDate();
+    const reminderIso = brasiliaWallClockToUtcIso(
+      year,
+      month,
+      day,
+      DAILY_REVIEW_REMINDER_HOUR_BRASILIA
+    );
+
+    if (new Date(reminderIso).getTime() >= reviewEnd.getTime()) {
+      break;
+    }
+
+    if (!isPast(reminderIso)) {
+      scheduler.scheduleAt(guildId, `review_daily_pending_${reminderIndex}`, reminderIso, () =>
+        cycleService.sendDailyPendingReviewsReminder(cycle.id)
+      );
+    }
+
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+    reminderIndex++;
+  }
+}
 
 function scheduleCycleTransitions(guildId: string, cycle: typeof schema.cycles.$inferSelect): void {
   const phase = cycle.phase;
@@ -29,6 +91,8 @@ function scheduleCycleTransitions(guildId: string, cycle: typeof schema.cycles.$
   }
 
   if (phase !== CyclePhase.CLOSED) {
+    scheduleDailyReviewReminders(guildId, cycle);
+
     scheduler.scheduleAt(guildId, "cycle_close", cycle.reviewDeadline, () =>
       cycleService.closeCycle(cycle.id)
     );
@@ -44,7 +108,7 @@ async function recoverGuild(guildId: string): Promise<void> {
   }
 
   if (cycle.phase === CyclePhase.DECLARATION && isPast(cycle.declarationDeadline)) {
-    logger.info("Recuperando: fechando declaracao atrasada.", { guildId, cycleId: cycle.id });
+    logger.info("Recuperando: fechando declaração atrasada.", { guildId, cycleId: cycle.id });
     await cycleService.closeDeclaration(cycle.id);
   }
 
@@ -52,7 +116,7 @@ async function recoverGuild(guildId: string): Promise<void> {
   if (!current || current.phase === CyclePhase.CLOSED) return;
 
   if (current.phase === CyclePhase.PRODUCTION && isPast(current.productionDeadline)) {
-    logger.info("Recuperando: iniciando review atrasada.", { guildId, cycleId: cycle.id });
+    logger.info("Recuperando: iniciando revisão atrasada.", { guildId, cycleId: cycle.id });
     await cycleService.startReviewPhase(cycle.id);
   }
 
@@ -66,6 +130,7 @@ async function recoverGuild(guildId: string): Promise<void> {
   }
 
   scheduleCycleTransitions(guildId, updated);
+  await discordScheduledEventService.syncCycleScheduledEvents(updated);
 }
 
 export async function initScheduler(client: Client<true>): Promise<void> {

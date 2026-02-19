@@ -22,7 +22,7 @@ function splitField(
   for (const line of lines) {
     if (current.length + line.length + 1 > 1000) {
       fields.push({
-        name: part === 0 ? name : `${name} (cont.)`,
+        name: part === 0 ? name : `${name} (continuação)`,
         value: current,
         inline: false,
       });
@@ -35,7 +35,7 @@ function splitField(
 
   if (current) {
     fields.push({
-      name: part === 0 ? name : `${name} (cont.)`,
+      name: part === 0 ? name : `${name} (continuação)`,
       value: current,
       inline: false,
     });
@@ -47,7 +47,7 @@ function splitField(
 export async function generateWeeklyReport(cycleId: number): Promise<EmbedBuilder> {
   const cycles = await db.select().from(schema.cycles).where(eq(schema.cycles.id, cycleId));
   const cycle = cycles[0];
-  if (!cycle) return rei.error("Ciclo nao encontrado.");
+  if (!cycle) return rei.error("Ciclo não encontrado.");
 
   const projects = await db.select().from(schema.projects).where(eq(schema.projects.cycleId, cycleId));
   const deliveries = await db.select().from(schema.deliveries).where(eq(schema.deliveries.cycleId, cycleId));
@@ -62,16 +62,17 @@ export async function generateWeeklyReport(cycleId: number): Promise<EmbedBuilde
   const deliveredProjects = projects.filter((p) => deliveryMap.has(p.id));
 
   const period = `${formatDate(cycle.startedAt)} - ${formatDate(cycle.closedAt ?? cycle.reviewDeadline)}`;
-  const embed = rei.report(`Relatorio -- Ciclo ${cycle.cycleNumber}`).setDescription(period);
+  const embed = rei.report(`Relatório -- Ciclo ${cycle.cycleNumber}`).setDescription(`${period} (horário de Brasília)`);
 
   const entregaLines = deliveredProjects.map((p) => `<@${p.userId}>: ${p.title}`);
   embed.addFields(...splitField(`Entregas (${deliveredProjects.length})`, entregaLines, "Nenhuma."));
 
-  const reviewLines = reviews.map((r) => {
-    const proj = projects.find((p) => deliveryMap.get(p.id)?.id === r.deliveryId);
-    return `<@${r.reviewerUserId}> -> ${proj?.title ?? "?"}`;
+  const reviewerIds = [...new Set(reviews.map((r) => r.reviewerUserId))];
+  const reviewLines = reviewerIds.map((uid) => {
+    const count = reviews.filter((r) => r.reviewerUserId === uid).length;
+    return `<@${uid}>: ${count} revisão(ões)`;
   });
-  embed.addFields(...splitField(`Reviews (${reviews.length})`, reviewLines, "Nenhuma."));
+  embed.addFields(...splitField(`Revisões (${reviews.length})`, reviewLines, "Nenhuma."));
 
   const ensinoLines = teachbackRows.map((t) => `<@${t.userId}>: ${t.topic}`);
   embed.addFields(...splitField(`Ensinos (${teachbackRows.length})`, ensinoLines, "Nenhum."));
