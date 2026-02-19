@@ -41,7 +41,6 @@ COMANDOS
 /entrega submeter — Submeter entrega (link ou arquivo).
 /review pendentes — Ver reviews atribuídas a você.
 /review enviar — Submeter review de uma entrega.
-/ensino registrar — Registrar micro-explicação (opcional).
 /ciclo info — Ver prazos do ciclo atual.
 /ciclo status — Ver seu estado no ciclo.
 
