@@ -3,6 +3,7 @@ import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core
 export const guilds = sqliteTable("guilds", {
   guildId: text("guild_id").primaryKey(),
   announcementChannelId: text("announcement_channel_id"),
+  reviewChannelId: text("review_channel_id"),
   cycleDurationDays: integer("cycle_duration_days").notNull().default(15),
   declarationDeadlineHours: integer("declaration_deadline_hours").notNull().default(24),
   reviewPeriodHours: integer("review_period_hours").notNull().default(168),
@@ -38,8 +39,81 @@ export const members = sqliteTable(
     consecutiveFailedCycles: integer("consecutive_failed_cycles").notNull().default(0),
     joinedAt: text("joined_at").notNull(),
     lastActiveAt: text("last_active_at"),
+    blackholeDeadline: text("blackhole_deadline").notNull(),
+    freezeDaysAvailable: integer("freeze_days_available").notNull().default(30),
+    freezeActiveUntil: text("freeze_active_until"),
+    freezeAllowanceResetAt: text("freeze_allowance_reset_at").notNull(),
+    bannedAt: text("banned_at"),
   },
   (table) => [uniqueIndex("members_guild_user_idx").on(table.guildId, table.userId)]
+);
+
+export const wallets = sqliteTable(
+  "wallets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    guildId: text("guild_id").notNull().references(() => guilds.guildId),
+    userId: text("user_id").notNull(),
+    balance: integer("balance").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [uniqueIndex("wallets_guild_user_idx").on(table.guildId, table.userId)]
+);
+
+export const projectContracts = sqliteTable("project_contracts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  guildId: text("guild_id").notNull().references(() => guilds.guildId),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  requirement: text("requirement").notNull(),
+  expectedArtifact: text("expected_artifact").notNull(),
+  durationHours: integer("duration_hours").notNull(),
+  acceptedAt: text("accepted_at").notNull(),
+  dueAt: text("due_at").notNull(),
+  status: text("status", { enum: ["open", "delivered", "concluded", "failed"] }).notNull().default("open"),
+  deliveryLink: text("delivery_link"),
+  deliveryAttachmentUrl: text("delivery_attachment_url"),
+  deliveredAt: text("delivered_at"),
+  concludedAt: text("concluded_at"),
+  failedAt: text("failed_at"),
+  penaltyApplied: integer("penalty_applied", { mode: "boolean" }).notNull().default(false),
+});
+
+export const reviewThreads = sqliteTable(
+  "review_threads",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    guildId: text("guild_id").notNull().references(() => guilds.guildId),
+    contractId: integer("contract_id").notNull().references(() => projectContracts.id),
+    evaluateeUserId: text("evaluatee_user_id").notNull(),
+    evaluatorUserId: text("evaluator_user_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    stage: text("stage", {
+      enum: ["presentation", "feedback", "counter_feedback", "final_analysis", "approved", "rejected", "expired"],
+    }).notNull().default("presentation"),
+    presentation: text("presentation"),
+    feedback: text("feedback"),
+    counterFeedback: text("counter_feedback"),
+    finalAnalysis: text("final_analysis"),
+    projectScore: integer("project_score"),
+    difficulty: integer("difficulty"),
+    approved: integer("approved", { mode: "boolean" }),
+    awardedDays: integer("awarded_days"),
+    reviewerScore: integer("reviewer_score"),
+    reviewerComment: text("reviewer_comment"),
+    evaluatorCompletedAt: text("evaluator_completed_at"),
+    evaluateeRatedAt: text("evaluatee_rated_at"),
+    reviewDueAt: text("review_due_at"),
+    closedAt: text("closed_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("review_threads_thread_idx").on(table.threadId),
+    uniqueIndex("review_threads_contract_thread_idx").on(table.contractId, table.threadId),
+  ]
 );
 
 export const projects = sqliteTable(
@@ -101,15 +175,24 @@ export const reviews = sqliteTable(
   (table) => [uniqueIndex("reviews_assignment_idx").on(table.assignmentId)]
 );
 
-export const teachbacks = sqliteTable("teachbacks", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  cycleId: integer("cycle_id").notNull().references(() => cycles.id),
-  guildId: text("guild_id").notNull(),
-  userId: text("user_id").notNull(),
-  topic: text("topic").notNull(),
-  content: text("content").notNull(),
-  registeredAt: text("registered_at").notNull(),
-});
+export const walletLedger = sqliteTable(
+  "wallet_ledger",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    guildId: text("guild_id").notNull(),
+    cycleId: integer("cycle_id"),
+    userId: text("user_id").notNull(),
+    assignmentId: integer("assignment_id").references(() => reviewAssignments.id),
+    relatedUserId: text("related_user_id"),
+    entryType: text("entry_type", {
+      enum: ["seed", "review_escrow", "review_reward", "review_refund", "admin_adjustment"],
+    }).notNull(),
+    delta: integer("delta").notNull(),
+    note: text("note"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [uniqueIndex("wallet_ledger_assignment_entry_idx").on(table.assignmentId, table.entryType)]
+);
 
 export const discordScheduledEvents = sqliteTable(
   "discord_scheduled_events",
@@ -154,7 +237,6 @@ export const eventsLog = sqliteTable("events_log", {
       "delivery_submitted",
       "review_assigned",
       "review_submitted",
-      "teachback_registered",
       "member_state_changed",
       "reminder_sent",
       "report_generated",

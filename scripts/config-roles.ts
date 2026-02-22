@@ -17,7 +17,7 @@ async function main() {
     .where(eq(schema.guilds.guildId, "1438620348928229608"));
 
   const rows = await db.select().from(schema.guilds);
-  console.log("Config atualizada:", rows[0]);
+  console.log("Config updated:", rows[0]);
   process.exit(0);
 }
 

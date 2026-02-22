@@ -108,14 +108,3 @@ CREATE TABLE `reviews` (
 	FOREIGN KEY (`assignment_id`) REFERENCES `review_assignments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`delivery_id`) REFERENCES `deliveries`(`id`) ON UPDATE no action ON DELETE no action
 );
---> statement-breakpoint
-CREATE TABLE `teachbacks` (
-	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-	`cycle_id` integer NOT NULL,
-	`guild_id` text NOT NULL,
-	`user_id` text NOT NULL,
-	`topic` text NOT NULL,
-	`content` text NOT NULL,
-	`registered_at` text NOT NULL,
-	FOREIGN KEY (`cycle_id`) REFERENCES `cycles`(`id`) ON UPDATE no action ON DELETE no action
-);

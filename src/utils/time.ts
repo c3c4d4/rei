@@ -1,4 +1,4 @@
-const BRASILIA_TIMEZONE = "America/Sao_Paulo";
+const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
 
 export function now(): string {
   return new Date().toISOString();
@@ -10,6 +10,12 @@ export function addHours(date: Date, hours: number): Date {
 
 export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+export function addYears(date: Date, years: number): Date {
+  const copy = new Date(date);
+  copy.setUTCFullYear(copy.getUTCFullYear() + years);
+  return copy;
 }
 
 export function isBefore(a: string, b: string): boolean {
@@ -25,8 +31,8 @@ export function msUntil(iso: string): number {
 }
 
 export function formatShort(iso: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: BRASILIA_TIMEZONE,
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: SAO_PAULO_TIMEZONE,
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -36,8 +42,8 @@ export function formatShort(iso: string): string {
 }
 
 export function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: BRASILIA_TIMEZONE,
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: SAO_PAULO_TIMEZONE,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

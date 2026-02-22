@@ -1,11 +1,9 @@
-import { SlashCommandBuilder, ChannelType, AttachmentBuilder, MessageFlags } from "discord.js";
+import { SlashCommandBuilder, ChannelType, MessageFlags } from "discord.js";
 import type { ChatInputCommandInteraction } from "discord.js";
 import type { Command } from "../types/commands.js";
 import { db, schema } from "../db/index.js";
 import { and, eq } from "drizzle-orm";
-import { cycleService } from "../services/cycle.service.js";
 import { memberService } from "../services/member.service.js";
-import { generateMonthlyExport } from "../services/export.service.js";
 import { messages } from "../utils/messages.js";
 import { rei } from "../utils/embeds.js";
 import { EventType } from "../utils/constants.js";
@@ -13,12 +11,12 @@ import { logEvent } from "../services/event-log.service.js";
 import { requireGuild, requireAdmin } from "../utils/permissions.js";
 import { rescheduleGuild } from "../scheduler/index.js";
 import { formatShort } from "../utils/time.js";
-import { discordScheduledEventService } from "../services/discord-scheduled-event.service.js";
+import { kickstartService } from "../services/kickstart.service.js";
 
 function formatMemberState(state: string): string {
   const labels: Record<string, string> = {
-    active: "Ativo",
-    observer: "Observador",
+    active: "Active",
+    observer: "Observer",
   };
   return labels[state] ?? state;
 }
@@ -26,83 +24,65 @@ function formatMemberState(state: string): string {
 export const admin: Command = {
   data: new SlashCommandBuilder()
     .setName("rei")
-    .setDescription("Comandos administrativos REI.")
+    .setDescription("REI admin commands.")
     .addSubcommandGroup((group) =>
       group
         .setName("config")
-        .setDescription("Configurações do servidor.")
+        .setDescription("Server settings.")
         .addSubcommand((sub) =>
           sub
-            .setName("canal")
-            .setDescription("Definir canal de anúncios.")
+            .setName("channel")
+            .setDescription("Set the announcements channel.")
             .addChannelOption((opt) =>
               opt
-                .setName("canal")
-                .setDescription("Canal de texto.")
+                .setName("channel")
+                .setDescription("Text channel.")
                 .setRequired(true)
                 .addChannelTypes(ChannelType.GuildText)
             )
         )
         .addSubcommand((sub) =>
           sub
-            .setName("duracao")
-            .setDescription("Definir duração do ciclo em dias.")
-            .addIntegerOption((opt) =>
-              opt.setName("dias").setDescription("Dias.").setRequired(true).setMinValue(3).setMaxValue(30)
-            )
-        )
-        .addSubcommand((sub) =>
-          sub
-            .setName("declaracao")
-            .setDescription("Definir prazo de declaração em horas.")
-            .addIntegerOption((opt) =>
-              opt.setName("horas").setDescription("Horas.").setRequired(true).setMinValue(6).setMaxValue(72)
-            )
-        )
-        .addSubcommand((sub) =>
-          sub
-            .setName("review")
-            .setDescription("Definir período de revisão em horas.")
-            .addIntegerOption((opt) =>
-              opt.setName("horas").setDescription("Horas.").setRequired(true).setMinValue(12).setMaxValue(336)
+            .setName("review-channel")
+            .setDescription("Set the public review threads channel.")
+            .addChannelOption((opt) =>
+              opt
+                .setName("channel")
+                .setDescription("Text channel where review threads will be created.")
+                .setRequired(true)
+                .addChannelTypes(ChannelType.GuildText)
             )
         )
         .addSubcommand((sub) =>
           sub
             .setName("roles")
-            .setDescription("Definir cargos de ativo e observador.")
+            .setDescription("Set active and observer roles.")
             .addRoleOption((opt) =>
-              opt.setName("ativo").setDescription("Cargo para membros ativos.").setRequired(true)
+              opt.setName("active").setDescription("Role for active members.").setRequired(true)
             )
             .addRoleOption((opt) =>
-              opt.setName("observador").setDescription("Cargo para observadores.").setRequired(true)
+              opt.setName("observer").setDescription("Role for observers.").setRequired(true)
             )
         )
     )
     .addSubcommand((sub) =>
       sub
-        .setName("export")
-        .setDescription("Exportar registro mensal.")
-        .addIntegerOption((opt) =>
-          opt.setName("mes").setDescription("Mês (1-12).").setRequired(true).setMinValue(1).setMaxValue(12)
-        )
-        .addIntegerOption((opt) =>
-          opt.setName("ano").setDescription("Ano.").setRequired(true).setMinValue(2024).setMaxValue(2030)
-        )
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("estado")
-        .setDescription("Ver estado de um membro.")
+        .setName("state")
+        .setDescription("View a member state.")
         .addUserOption((opt) =>
-          opt.setName("usuario").setDescription("Usuário.").setRequired(true)
+          opt.setName("user").setDescription("User.").setRequired(true)
         )
     )
     .addSubcommand((sub) =>
-      sub.setName("forcar-ciclo").setDescription("Forçar abertura de novo ciclo.")
-    )
-    .addSubcommand((sub) =>
-      sub.setName("eventos-sincronizar").setDescription("Sincronizar eventos agendados do ciclo ativo.")
+      sub
+        .setName("kickstart")
+        .setDescription("Reset legacy data and start everyone together.")
+        .addBooleanOption((opt) =>
+          opt
+            .setName("confirm")
+            .setDescription("Must be true. This action is destructive.")
+            .setRequired(true)
+        )
     ),
 
   async execute(interaction) {
@@ -125,22 +105,8 @@ export const admin: Command = {
       return;
     }
 
-    if (subcommand === "export") {
-      const mes = interaction.options.getInteger("mes", true);
-      const ano = interaction.options.getInteger("ano", true);
-      const content = await generateMonthlyExport(guildId, ano, mes);
-
-      const buffer = Buffer.from(content, "utf-8");
-      const attachment = new AttachmentBuilder(buffer, {
-        name: `registro-${ano}-${String(mes).padStart(2, "0")}.md`,
-      });
-
-      await interaction.reply({ files: [attachment], flags: [MessageFlags.Ephemeral] });
-      return;
-    }
-
-    if (subcommand === "estado") {
-      const user = interaction.options.getUser("usuario", true);
+    if (subcommand === "state") {
+      const user = interaction.options.getUser("user", true);
       const member = await memberService.getOrCreateMember(guildId, user.id);
 
       const stateHistory = await db
@@ -153,53 +119,70 @@ export const admin: Command = {
           )
         );
 
-      const embed = rei.info("Estado do Membro")
+      const embed = rei.info("Member State")
         .addFields(
-          { name: "Usuário", value: user.tag, inline: true },
-          { name: "Estado", value: formatMemberState(member.state), inline: true },
-          { name: "Ciclos falhos consecutivos", value: String(member.consecutiveFailedCycles), inline: true },
-          { name: "Membro desde", value: `${formatShort(member.joinedAt)} (Brasília)`, inline: true },
-          { name: "Histórico", value: `${stateHistory.length} alterações`, inline: true },
+          { name: "User", value: user.tag, inline: true },
+          { name: "State", value: formatMemberState(member.state), inline: true },
+          { name: "Consecutive fail streak", value: String(member.consecutiveFailedCycles), inline: true },
+          { name: "Member since", value: `${formatShort(member.joinedAt)} (Sao Paulo)`, inline: true },
+          { name: "History", value: `${stateHistory.length} changes`, inline: true },
         );
 
       await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
       return;
     }
 
-    if (subcommand === "forcar-ciclo") {
-      const existing = await cycleService.getActiveCycle(guildId);
-      if (existing) {
+    if (subcommand === "kickstart") {
+      const confirm = interaction.options.getBoolean("confirm", true);
+      if (!confirm) {
         await interaction.reply({
-          embeds: [rei.error(`Ciclo ${existing.cycleNumber} ainda ativo. Encerre antes de forçar novo.`)],
+          embeds: [rei.error(messages.kickstartConfirmRequired())],
           flags: [MessageFlags.Ephemeral],
         });
         return;
       }
 
       await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-      const cycle = await cycleService.openCycle(guildId);
-      if (cycle) {
-        await rescheduleGuild(guildId);
-        await interaction.editReply({ embeds: [rei.success(`Ciclo ${cycle.cycleNumber} forçado.`)] });
-      } else {
-        await interaction.editReply({ embeds: [rei.error(messages.internalError())] });
-      }
-      return;
-    }
 
-    if (subcommand === "eventos-sincronizar") {
-      const cycle = await cycleService.getActiveCycle(guildId);
-      if (!cycle) {
-        await interaction.reply({ embeds: [rei.error(messages.noCycleActive())], flags: [MessageFlags.Ephemeral] });
+      const guild = interaction.guild;
+      if (!guild) {
+        await interaction.editReply({ embeds: [rei.error(messages.internalError())] });
         return;
       }
 
-      await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-      const result = await discordScheduledEventService.syncCycleScheduledEvents(cycle);
+      const dbMembers = await db
+        .select({ userId: schema.members.userId })
+        .from(schema.members)
+        .where(eq(schema.members.guildId, guildId));
+      const dbUserIds = dbMembers.map((row) => row.userId);
+
+      let guildUserIds: string[] = [];
+      try {
+        const fetchedMembers = await guild.members.fetch();
+        guildUserIds = fetchedMembers
+          .filter((member) => !member.user.bot)
+          .map((member) => member.id);
+      } catch {
+        guildUserIds = [];
+      }
+
+      const allUserIds = Array.from(new Set([...dbUserIds, ...guildUserIds, interaction.user.id]));
+
+      const result = await kickstartService.kickstartGuild(guildId, allUserIds);
+      await rescheduleGuild(guildId);
+
       await interaction.editReply({
-        embeds: [rei.success(`Eventos sincronizados: ${result.synced}. Ignorados: ${result.skipped}.`)],
+        embeds: [
+          rei.success(messages.kickstartDone(result.membersSeeded)).addFields(
+            { name: "Started At", value: `${formatShort(result.startedAt)} (Sao Paulo)`, inline: true },
+            { name: "Blackhole Deadline", value: `${formatShort(result.blackholeDeadline)} (Sao Paulo)`, inline: true },
+            { name: "Freeze Reset", value: `${formatShort(result.freezeResetAt)} (Sao Paulo)`, inline: true }
+          ),
+        ],
       });
+      return;
     }
+
   },
 };
 
@@ -219,51 +202,24 @@ async function handleConfig(
     return;
   }
 
-  if (subcommand === "canal") {
-    const canal = interaction.options.getChannel("canal", true);
+  if (subcommand === "channel") {
+    const channel = interaction.options.getChannel("channel", true);
     await db
       .update(schema.guilds)
-      .set({ announcementChannelId: canal.id })
+      .set({ announcementChannelId: channel.id })
       .where(eq(schema.guilds.guildId, guildId));
-  } else if (subcommand === "duracao") {
-    const dias = interaction.options.getInteger("dias", true);
-    const invalidMessage = validateCycleConfig(dias, config.declarationDeadlineHours, config.reviewPeriodHours);
-    if (invalidMessage) {
-      await interaction.reply({ embeds: [rei.error(invalidMessage)], flags: [MessageFlags.Ephemeral] });
-      return;
-    }
+  } else if (subcommand === "review-channel") {
+    const channel = interaction.options.getChannel("channel", true);
     await db
       .update(schema.guilds)
-      .set({ cycleDurationDays: dias })
-      .where(eq(schema.guilds.guildId, guildId));
-  } else if (subcommand === "declaracao") {
-    const horas = interaction.options.getInteger("horas", true);
-    const invalidMessage = validateCycleConfig(config.cycleDurationDays, horas, config.reviewPeriodHours);
-    if (invalidMessage) {
-      await interaction.reply({ embeds: [rei.error(invalidMessage)], flags: [MessageFlags.Ephemeral] });
-      return;
-    }
-    await db
-      .update(schema.guilds)
-      .set({ declarationDeadlineHours: horas })
-      .where(eq(schema.guilds.guildId, guildId));
-  } else if (subcommand === "review") {
-    const horas = interaction.options.getInteger("horas", true);
-    const invalidMessage = validateCycleConfig(config.cycleDurationDays, config.declarationDeadlineHours, horas);
-    if (invalidMessage) {
-      await interaction.reply({ embeds: [rei.error(invalidMessage)], flags: [MessageFlags.Ephemeral] });
-      return;
-    }
-    await db
-      .update(schema.guilds)
-      .set({ reviewPeriodHours: horas })
+      .set({ reviewChannelId: channel.id })
       .where(eq(schema.guilds.guildId, guildId));
   } else if (subcommand === "roles") {
-    const ativo = interaction.options.getRole("ativo", true);
-    const observador = interaction.options.getRole("observador", true);
+    const active = interaction.options.getRole("active", true);
+    const observer = interaction.options.getRole("observer", true);
     await db
       .update(schema.guilds)
-      .set({ activeRoleId: ativo.id, observerRoleId: observador.id })
+      .set({ activeRoleId: active.id, observerRoleId: observer.id })
       .where(eq(schema.guilds.guildId, guildId));
   }
 
@@ -274,26 +230,4 @@ async function handleConfig(
 
   await rescheduleGuild(guildId);
   await interaction.reply({ embeds: [rei.success(messages.configUpdated())], flags: [MessageFlags.Ephemeral] });
-}
-
-function validateCycleConfig(
-  cycleDurationDays: number,
-  declarationDeadlineHours: number,
-  reviewPeriodHours: number
-): string | null {
-  const totalHours = cycleDurationDays * 24;
-
-  if (declarationDeadlineHours >= totalHours) {
-    return "Declaração inválida: prazo de declaração precisa ser menor que a duração total do ciclo.";
-  }
-
-  if (reviewPeriodHours >= totalHours) {
-    return "Revisão inválida: período de revisão precisa ser menor que a duração total do ciclo.";
-  }
-
-  if (declarationDeadlineHours > totalHours - reviewPeriodHours) {
-    return "Configuração inválida: declaração + revisão ultrapassam a duração do ciclo.";
-  }
-
-  return null;
 }

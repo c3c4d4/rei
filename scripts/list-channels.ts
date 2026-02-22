@@ -6,7 +6,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 client.once("ready", async (c) => {
   const guild = c.guilds.cache.get("1438620348928229608");
   if (!guild) {
-    console.log("Guild nao encontrada");
+    console.log("Guild not found");
     process.exit(0);
   }
 

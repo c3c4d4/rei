@@ -1,70 +1,65 @@
 import "dotenv/config";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { Client, GatewayIntentBits } from "discord.js";
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-const CHANNEL_ID = "1438633619139723494"; // #geral
+const DEFAULT_CHANNEL_ID = "1438633619139723494";
+const channelId = process.env.GUIDE_CHANNEL_ID ?? DEFAULT_CHANNEL_ID;
 
-const message = `--- PROTOCOLO DE OPERAÇÃO ---
+function splitIntoChunks(content: string, maxLength = 1900): string[] {
+  if (content.length <= maxLength) return [content];
 
-REI gerencia ciclos semanais de produção. O sistema é automático. Não há negociação.
+  const chunks: string[] = [];
+  const blocks = content.split("\n\n");
+  let current = "";
 
-FLUXO DO CICLO
+  for (const block of blocks) {
+    const candidate = current.length === 0 ? block : `${current}\n\n${block}`;
+    if (candidate.length <= maxLength) {
+      current = candidate;
+      continue;
+    }
 
-1. Abertura — REI anuncia o início do ciclo.
-2. Declaração — 24h para declarar seu projeto.
-3. Produção — Período de trabalho. Submeta sua entrega antes do prazo.
-4. Review — REI atribui 2 entregas para você revisar.
-5. Encerramento — Relatório gerado. Estados ajustados.
+    if (current.length > 0) {
+      chunks.push(current);
+      current = "";
+    }
 
-O QUE CONTA COMO PROJETO
+    if (block.length <= maxLength) {
+      current = block;
+      continue;
+    }
 
-Um projeto é qualquer produção concreta dentro das áreas de produtividade do servidor:
-- #visual — ilustração, design, fotografia, vídeo, animação.
-- #sonoro — composição, mix, sound design, gravação.
-- #tátil — escultura, modelagem, protótipo físico, craft.
-- #textual — escrita, roteiro, artigo, poesia, documentação.
-- #tecnomatemático — código, algoritmo, ferramenta, modelo, análise.
+    let index = 0;
+    while (index < block.length) {
+      chunks.push(block.slice(index, index + maxLength));
+      index += maxLength;
+    }
+  }
 
-Requisitos mínimos para declaração:
-- Título claro do que será produzido.
-- Descrição breve do escopo (1-2 frases).
-- Artefato esperado: o que você vai entregar no final (ex: "arquivo .png da ilustração", "repositório com o código", "pdf do texto").
-
-O projeto deve ser concluível dentro de 1 ciclo (7 dias). Não declare o que não pretende terminar.
-
-A categoria Projetos (#the-great-lock-in, #hypnagogia) é reservada para projetos especiais de longo prazo. Estes não substituem a declaração semanal no ciclo.
-
-COMANDOS
-
-/projeto declarar — Declarar projeto (título, descrição, artefato esperado).
-/entrega submeter — Submeter entrega (link ou arquivo).
-/review pendentes — Ver reviews atribuídas a você.
-/review enviar — Submeter review de uma entrega.
-/ciclo info — Ver prazos do ciclo atual.
-/ciclo status — Ver seu estado no ciclo.
-
-REGRA DE PRESENÇA
-
-Para permanecer Ativo, cumpra 2 de 3 por ciclo:
-- Entregar
-- Revisar
-- Ensinar
-
-Falha em 2 ciclos consecutivos: estado ajustado para Observador.
-Observadores não declaram projetos e não participam de decisões.
-
-O tempo avança. O sistema registra.
----`;
+  if (current.length > 0) chunks.push(current);
+  return chunks;
+}
 
 client.once("ready", async () => {
-  const channel = await client.channels.fetch(CHANNEL_ID);
-  if (channel?.isTextBased() && "send" in channel) {
-    await channel.send(message);
-    console.log("Mensagem enviada em #geral.");
-  } else {
-    console.log("Canal não encontrado ou sem permissão.");
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel || !channel.isTextBased() || !("send" in channel)) {
+    console.error("Channel not found or missing permission.");
+    process.exit(1);
+    return;
   }
+
+  const introPath = resolve(process.cwd(), "introduction.md");
+  const content = await readFile(introPath, "utf-8");
+  const chunks = splitIntoChunks(content);
+
+  for (const chunk of chunks) {
+    await channel.send({ content: chunk });
+  }
+
+  console.log(`Posted intro guide in ${chunks.length} message(s).`);
   process.exit(0);
 });
 

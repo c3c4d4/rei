@@ -1,10 +1,12 @@
 import type { Command } from "../types/commands.js";
-import { projeto } from "./projeto.js";
-import { entrega } from "./entrega.js";
+import { projectCommand } from "./project.js";
+import { deliveryCommand } from "./delivery.js";
 import { review } from "./review.js";
-import { ciclo } from "./ciclo.js";
+import { blackholeCommand } from "./blackhole.js";
+import { profileCommand } from "./profile.js";
+import { poolCommand } from "./pool.js";
 import { admin } from "./admin.js";
 
 export function loadCommands(): Command[] {
-  return [projeto, entrega, review, ciclo, admin];
+  return [projectCommand, deliveryCommand, review, blackholeCommand, profileCommand, poolCommand, admin];
 }

@@ -6,7 +6,7 @@ const client = new Client({
 });
 
 const GUILD_ID = "1438620348928229608";
-const ATIVO_ROLE_ID = "1469440446542512293";
+const ACTIVE_ROLE_ID = "1469440446542512293";
 
 client.once("ready", async () => {
   const guild = await client.guilds.fetch(GUILD_ID);
@@ -16,20 +16,20 @@ client.once("ready", async () => {
   for (const [, member] of members) {
     if (member.user.bot) continue;
 
-    if (!member.roles.cache.has(ATIVO_ROLE_ID)) {
+    if (!member.roles.cache.has(ACTIVE_ROLE_ID)) {
       try {
-        await member.roles.add(ATIVO_ROLE_ID);
-        console.log(`Ativo atribuído: ${member.user.tag}`);
+        await member.roles.add(ACTIVE_ROLE_ID);
+        console.log(`Active role assigned: ${member.user.tag}`);
         count++;
       } catch (err) {
-        console.log(`Falha: ${member.user.tag} — ${err}`);
+        console.log(`Failed: ${member.user.tag} - ${err}`);
       }
     } else {
-      console.log(`Já possui: ${member.user.tag}`);
+      console.log(`Already has role: ${member.user.tag}`);
     }
   }
 
-  console.log(`\n${count} membros atualizados.`);
+  console.log(`\n${count} members updated.`);
   process.exit(0);
 });
 

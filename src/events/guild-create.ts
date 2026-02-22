@@ -4,6 +4,7 @@ import { db, schema } from "../db/index.js";
 import { eq } from "drizzle-orm";
 import { now } from "../utils/time.js";
 import { logger } from "../utils/logger.js";
+import { rescheduleGuild } from "../scheduler/index.js";
 
 export function registerGuildCreateEvent(): void {
   client.on(Events.GuildCreate, async (guild) => {
@@ -14,7 +15,9 @@ export function registerGuildCreateEvent(): void {
 
     if (rows.length === 0) {
       await db.insert(schema.guilds).values({ guildId: guild.id, createdAt: now() });
-      logger.info("Guild registrada.", { guildId: guild.id });
+      logger.info("Guild registered.", { guildId: guild.id });
     }
+
+    await rescheduleGuild(guild.id);
   });
 }

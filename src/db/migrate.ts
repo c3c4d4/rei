@@ -5,9 +5,9 @@ import { logger } from "../utils/logger.js";
 export async function runMigrations(): Promise<void> {
   try {
     await migrate(db, { migrationsFolder: "./drizzle" });
-    logger.info("Migracoes aplicadas.");
+    logger.info("Migrations applied.");
   } catch (error) {
-    logger.error("Falha ao aplicar migracoes.", { error: String(error) });
+    logger.error("Failed to apply migrations.", { error: String(error) });
     throw error;
   }
 }

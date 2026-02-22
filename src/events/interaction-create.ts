@@ -14,7 +14,7 @@ export function registerInteractionCreateEvent(): void {
     try {
       await command.execute(interaction);
     } catch (error) {
-      logger.error("Falha na execucao do comando.", {
+      logger.error("Command execution failed.", {
         error: String(error),
         command: interaction.commandName,
         user: interaction.user.id,

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "243e91d1-d3af-48ea-9d81-496e0f03031f",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "e6394c6e-55d7-43e8-b28a-5b096a3103b8",
+  "prevId": "a82d6d13-e038-4d69-a0d5-69aca0abf598",
   "tables": {
     "cycles": {
       "name": "cycles",
@@ -192,6 +192,101 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "discord_scheduled_events": {
+      "name": "discord_scheduled_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cycle_id": {
+          "name": "cycle_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "milestone": {
+          "name": "milestone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discord_event_id": {
+          "name": "discord_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "synced_at": {
+          "name": "synced_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "discord_sched_cycle_milestone_idx": {
+          "name": "discord_sched_cycle_milestone_idx",
+          "columns": [
+            "cycle_id",
+            "milestone"
+          ],
+          "isUnique": true
+        },
+        "discord_sched_event_id_idx": {
+          "name": "discord_sched_event_id_idx",
+          "columns": [
+            "discord_event_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "discord_scheduled_events_guild_id_guilds_guild_id_fk": {
+          "name": "discord_scheduled_events_guild_id_guilds_guild_id_fk",
+          "tableFrom": "discord_scheduled_events",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "guild_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "discord_scheduled_events_cycle_id_cycles_id_fk": {
+          "name": "discord_scheduled_events_cycle_id_cycles_id_fk",
+          "tableFrom": "discord_scheduled_events",
+          "tableTo": "cycles",
+          "columnsFrom": [
+            "cycle_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "events_log": {
       "name": "events_log",
       "columns": {
@@ -268,13 +363,20 @@
           "notNull": false,
           "autoincrement": false
         },
+        "review_channel_id": {
+          "name": "review_channel_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "cycle_duration_days": {
           "name": "cycle_duration_days",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 7
+          "default": 15
         },
         "declaration_deadline_hours": {
           "name": "declaration_deadline_hours",
@@ -290,7 +392,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 48
+          "default": 168
         },
         "cycle_start_day_of_week": {
           "name": "cycle_start_day_of_week",
@@ -463,6 +565,42 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "blackhole_deadline": {
+          "name": "blackhole_deadline",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "freeze_days_available": {
+          "name": "freeze_days_available",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 30
+        },
+        "freeze_active_until": {
+          "name": "freeze_active_until",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "freeze_allowance_reset_at": {
+          "name": "freeze_allowance_reset_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "banned_at": {
+          "name": "banned_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -479,6 +617,151 @@
         "members_guild_id_guilds_guild_id_fk": {
           "name": "members_guild_id_guilds_guild_id_fk",
           "tableFrom": "members",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "guild_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "project_contracts": {
+      "name": "project_contracts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requirement": {
+          "name": "requirement",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expected_artifact": {
+          "name": "expected_artifact",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "duration_hours": {
+          "name": "duration_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "accepted_at": {
+          "name": "accepted_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "due_at": {
+          "name": "due_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'open'"
+        },
+        "delivery_link": {
+          "name": "delivery_link",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "delivery_attachment_url": {
+          "name": "delivery_attachment_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "delivered_at": {
+          "name": "delivered_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "concluded_at": {
+          "name": "concluded_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "failed_at": {
+          "name": "failed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "penalty_applied": {
+          "name": "penalty_applied",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "project_contracts_guild_id_guilds_guild_id_fk": {
+          "name": "project_contracts_guild_id_guilds_guild_id_fk",
+          "tableFrom": "project_contracts",
           "tableTo": "guilds",
           "columnsFrom": [
             "guild_id"
@@ -637,7 +920,16 @@
           "default": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "review_assignments_delivery_reviewer_idx": {
+          "name": "review_assignments_delivery_reviewer_idx",
+          "columns": [
+            "delivery_id",
+            "reviewer_user_id"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "review_assignments_delivery_id_deliveries_id_fk": {
           "name": "review_assignments_delivery_id_deliveries_id_fk",
@@ -645,6 +937,179 @@
           "tableTo": "deliveries",
           "columnsFrom": [
             "delivery_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "review_threads": {
+      "name": "review_threads",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "contract_id": {
+          "name": "contract_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evaluatee_user_id": {
+          "name": "evaluatee_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "evaluator_user_id": {
+          "name": "evaluator_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "thread_id": {
+          "name": "thread_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'presentation'"
+        },
+        "presentation": {
+          "name": "presentation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "feedback": {
+          "name": "feedback",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "counter_feedback": {
+          "name": "counter_feedback",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "final_analysis": {
+          "name": "final_analysis",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "difficulty": {
+          "name": "difficulty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approved": {
+          "name": "approved",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "awarded_days": {
+          "name": "awarded_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "review_threads_thread_idx": {
+          "name": "review_threads_thread_idx",
+          "columns": [
+            "thread_id"
+          ],
+          "isUnique": true
+        },
+        "review_threads_contract_thread_idx": {
+          "name": "review_threads_contract_thread_idx",
+          "columns": [
+            "contract_id",
+            "thread_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "review_threads_guild_id_guilds_guild_id_fk": {
+          "name": "review_threads_guild_id_guilds_guild_id_fk",
+          "tableFrom": "review_threads",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "guild_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "review_threads_contract_id_project_contracts_id_fk": {
+          "name": "review_threads_contract_id_project_contracts_id_fk",
+          "tableFrom": "review_threads",
+          "tableTo": "project_contracts",
+          "columnsFrom": [
+            "contract_id"
           ],
           "columnsTo": [
             "id"
@@ -717,7 +1182,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "reviews_assignment_idx": {
+          "name": "reviews_assignment_idx",
+          "columns": [
+            "assignment_id"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "reviews_assignment_id_review_assignments_id_fk": {
           "name": "reviews_assignment_id_review_assignments_id_fk",
@@ -741,6 +1214,185 @@
           ],
           "columnsTo": [
             "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "wallet_ledger": {
+      "name": "wallet_ledger",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cycle_id": {
+          "name": "cycle_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "assignment_id": {
+          "name": "assignment_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "related_user_id": {
+          "name": "related_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entry_type": {
+          "name": "entry_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delta": {
+          "name": "delta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "wallet_ledger_assignment_entry_idx": {
+          "name": "wallet_ledger_assignment_entry_idx",
+          "columns": [
+            "assignment_id",
+            "entry_type"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "wallet_ledger_assignment_id_review_assignments_id_fk": {
+          "name": "wallet_ledger_assignment_id_review_assignments_id_fk",
+          "tableFrom": "wallet_ledger",
+          "tableTo": "review_assignments",
+          "columnsFrom": [
+            "assignment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "wallets": {
+      "name": "wallets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "balance": {
+          "name": "balance",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "wallets_guild_user_idx": {
+          "name": "wallets_guild_user_idx",
+          "columns": [
+            "guild_id",
+            "user_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "wallets_guild_id_guilds_guild_id_fk": {
+          "name": "wallets_guild_id_guilds_guild_id_fk",
+          "tableFrom": "wallets",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "guild_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"

@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "243e91d1-d3af-48ea-9d81-496e0f03031f",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "4a8bcec6-2ef2-424c-afa5-71f677cbebd4",
+  "prevId": "243e91d1-d3af-48ea-9d81-496e0f03031f",
   "tables": {
     "cycles": {
       "name": "cycles",
@@ -192,6 +192,101 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "discord_scheduled_events": {
+      "name": "discord_scheduled_events",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cycle_id": {
+          "name": "cycle_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "milestone": {
+          "name": "milestone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "discord_event_id": {
+          "name": "discord_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "synced_at": {
+          "name": "synced_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "discord_sched_cycle_milestone_idx": {
+          "name": "discord_sched_cycle_milestone_idx",
+          "columns": [
+            "cycle_id",
+            "milestone"
+          ],
+          "isUnique": true
+        },
+        "discord_sched_event_id_idx": {
+          "name": "discord_sched_event_id_idx",
+          "columns": [
+            "discord_event_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "discord_scheduled_events_guild_id_guilds_guild_id_fk": {
+          "name": "discord_scheduled_events_guild_id_guilds_guild_id_fk",
+          "tableFrom": "discord_scheduled_events",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "guild_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "discord_scheduled_events_cycle_id_cycles_id_fk": {
+          "name": "discord_scheduled_events_cycle_id_cycles_id_fk",
+          "tableFrom": "discord_scheduled_events",
+          "tableTo": "cycles",
+          "columnsFrom": [
+            "cycle_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "events_log": {
       "name": "events_log",
       "columns": {
@@ -274,7 +369,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 7
+          "default": 15
         },
         "declaration_deadline_hours": {
           "name": "declaration_deadline_hours",
@@ -290,7 +385,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 48
+          "default": 168
         },
         "cycle_start_day_of_week": {
           "name": "cycle_start_day_of_week",
@@ -637,7 +732,16 @@
           "default": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "review_assignments_delivery_reviewer_idx": {
+          "name": "review_assignments_delivery_reviewer_idx",
+          "columns": [
+            "delivery_id",
+            "reviewer_user_id"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "review_assignments_delivery_id_deliveries_id_fk": {
           "name": "review_assignments_delivery_id_deliveries_id_fk",
@@ -717,7 +821,15 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "reviews_assignment_idx": {
+          "name": "reviews_assignment_idx",
+          "columns": [
+            "assignment_id"
+          ],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {
         "reviews_assignment_id_review_assignments_id_fk": {
           "name": "reviews_assignment_id_review_assignments_id_fk",
@@ -741,6 +853,185 @@
           ],
           "columnsTo": [
             "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "wallet_ledger": {
+      "name": "wallet_ledger",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cycle_id": {
+          "name": "cycle_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "assignment_id": {
+          "name": "assignment_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "related_user_id": {
+          "name": "related_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entry_type": {
+          "name": "entry_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "delta": {
+          "name": "delta",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "wallet_ledger_assignment_entry_idx": {
+          "name": "wallet_ledger_assignment_entry_idx",
+          "columns": [
+            "assignment_id",
+            "entry_type"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "wallet_ledger_assignment_id_review_assignments_id_fk": {
+          "name": "wallet_ledger_assignment_id_review_assignments_id_fk",
+          "tableFrom": "wallet_ledger",
+          "tableTo": "review_assignments",
+          "columnsFrom": [
+            "assignment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "wallets": {
+      "name": "wallets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "guild_id": {
+          "name": "guild_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "balance": {
+          "name": "balance",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "wallets_guild_user_idx": {
+          "name": "wallets_guild_user_idx",
+          "columns": [
+            "guild_id",
+            "user_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "wallets_guild_id_guilds_guild_id_fk": {
+          "name": "wallets_guild_id_guilds_guild_id_fk",
+          "tableFrom": "wallets",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "guild_id"
           ],
           "onDelete": "no action",
           "onUpdate": "no action"

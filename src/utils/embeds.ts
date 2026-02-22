@@ -8,7 +8,7 @@ export const Color = {
   ANNOUNCEMENT: 0x1A1A2E,
 } as const;
 
-const FOOTER_TEXT = "REI // Sistema de Ciclos";
+const FOOTER_TEXT = "REI // Peer Learning";
 
 function base(color: number): EmbedBuilder {
   return new EmbedBuilder()

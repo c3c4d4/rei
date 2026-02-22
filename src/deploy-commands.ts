@@ -10,21 +10,21 @@ const rest = new REST().setToken(env.BOT_TOKEN);
 
 async function deploy() {
   try {
-    logger.info(`Registrando ${commandData.length} comandos...`);
+    logger.info(`Registering ${commandData.length} commands...`);
 
     if (env.DEV_GUILD_ID) {
       await rest.put(Routes.applicationGuildCommands(env.CLIENT_ID, env.DEV_GUILD_ID), {
         body: commandData,
       });
-      logger.info("Comandos registrados (guild).");
+      logger.info("Commands registered (guild).");
     } else {
       await rest.put(Routes.applicationCommands(env.CLIENT_ID), {
         body: commandData,
       });
-      logger.info("Comandos registrados (global).");
+      logger.info("Commands registered (global).");
     }
   } catch (error) {
-    logger.error("Falha ao registrar comandos.", { error: String(error) });
+    logger.error("Failed to register commands.", { error: String(error) });
     process.exit(1);
   }
 }

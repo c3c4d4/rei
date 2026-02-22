@@ -6,7 +6,7 @@ import { initScheduler } from "../scheduler/index.js";
 
 export function registerReadyEvent(): void {
   client.once(Events.ClientReady, async (readyClient) => {
-    logger.info(`REI operacional. ${readyClient.user.tag}`);
+    logger.info(`REI online. ${readyClient.user.tag}`);
 
     await runMigrations();
 
