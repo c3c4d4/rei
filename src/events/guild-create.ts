@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { now } from "../utils/time.js";
 import { logger } from "../utils/logger.js";
 import { rescheduleGuild } from "../scheduler/index.js";
+import { onboardingService } from "../services/onboarding.service.js";
 
 export function registerGuildCreateEvent(): void {
   client.on(Events.GuildCreate, async (guild) => {
@@ -19,5 +20,6 @@ export function registerGuildCreateEvent(): void {
     }
 
     await rescheduleGuild(guild.id);
+    await onboardingService.onboardGuildMembers(guild);
   });
 }
