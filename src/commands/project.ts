@@ -5,13 +5,30 @@ import { memberService } from "../services/member.service.js";
 import { blackholeService } from "../services/blackhole.service.js";
 import { messages } from "../utils/messages.js";
 import { rei } from "../utils/embeds.js";
-import {
-  DEFAULT_PROJECT_DURATION_HOURS,
-  MAX_PROJECT_DURATION_HOURS,
-  MIN_PROJECT_DURATION_HOURS,
-} from "../utils/constants.js";
 import { requireGuild } from "../utils/permissions.js";
 import { formatShort } from "../utils/time.js";
+
+const DISPLAY_TIMEZONE_LABEL = "Asia/Tokyo";
+const PROJECTS_PER_EMBED_PAGE = 4;
+const MAX_EMBEDS_PER_REPLY = 10;
+const MAX_FIELD_VALUE_LENGTH = 1024;
+
+function truncateText(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function chunkArray<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    chunks.push(values.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function formatTokyoDate(iso: string): string {
+  return `${formatShort(iso)} (${DISPLAY_TIMEZONE_LABEL})`;
+}
 
 export const projectCommand: Command = {
   data: new SlashCommandBuilder()
@@ -20,7 +37,7 @@ export const projectCommand: Command = {
     .addSubcommand((sub) =>
       sub
         .setName("start")
-        .setDescription("Start a new project with a deadline.")
+        .setDescription("Start a new project.")
         .addStringOption((opt) =>
           opt.setName("title").setDescription("Project title.").setRequired(true).setMaxLength(100)
         )
@@ -32,14 +49,6 @@ export const projectCommand: Command = {
         )
         .addStringOption((opt) =>
           opt.setName("artifact").setDescription("Expected artifact.").setRequired(true).setMaxLength(200)
-        )
-        .addIntegerOption((opt) =>
-          opt
-            .setName("duration_hours")
-            .setDescription("Time to complete the project, in hours.")
-            .setRequired(false)
-            .setMinValue(MIN_PROJECT_DURATION_HOURS)
-            .setMaxValue(MAX_PROJECT_DURATION_HOURS)
         )
     )
     .addSubcommand((sub) =>
@@ -75,23 +84,80 @@ export const projectCommand: Command = {
         return;
       }
 
-      const embed = rei.info("Open Projects", `${contracts.length} open project(s).`);
+      const ownerIds = [...new Set(contracts.map((contract) => contract.userId))];
+      const ownerLabels = new Map<string, string>();
 
-      for (const p of contracts) {
-        const ownerLabel = `<@${p.userId}>`;
-        embed.addFields({
-          name: ownerLabel,
-          value:
-            `**${p.title}**\n` +
-            `${p.description}\n` +
-            `Requirement: ${p.requirement}\n` +
-            `Artifact: ${p.expectedArtifact}\n` +
-            `Due: ${formatShort(p.dueAt)} (Sao Paulo)`,
+      if (interaction.guild) {
+        await Promise.all(
+          ownerIds.map(async (ownerId) => {
+            try {
+              const member = await interaction.guild!.members.fetch(ownerId);
+              ownerLabels.set(ownerId, `${member.displayName} (<@${ownerId}>)`);
+            } catch {
+              // Fall back to global user lookup below.
+            }
+          })
+        );
+      }
+
+      await Promise.all(
+        ownerIds
+          .filter((ownerId) => !ownerLabels.has(ownerId))
+          .map(async (ownerId) => {
+            try {
+              const user = await interaction.client.users.fetch(ownerId);
+              ownerLabels.set(ownerId, `${user.globalName ?? user.username} (<@${ownerId}>)`);
+            } catch {
+              ownerLabels.set(ownerId, `<@${ownerId}>`);
+            }
+          })
+      );
+
+      const pages = chunkArray(contracts, PROJECTS_PER_EMBED_PAGE);
+      const visiblePages = pages.slice(0, MAX_EMBEDS_PER_REPLY);
+      const embeds = visiblePages.map((pageContracts, pageIndex) => {
+        const pageNumber = pageIndex + 1;
+        const title =
+          pages.length > 1 ? `Open Projects • Page ${pageNumber}/${pages.length}` : "Open Projects";
+        const embed = rei.info(
+          title,
+          `${contracts.length} open project(s) • Times shown in ${DISPLAY_TIMEZONE_LABEL}.`
+        );
+
+        for (let i = 0; i < pageContracts.length; i++) {
+          const contract = pageContracts[i];
+          const ownerLabel = ownerLabels.get(contract.userId) ?? `<@${contract.userId}>`;
+          const projectIndex = pageIndex * PROJECTS_PER_EMBED_PAGE + i + 1;
+          const fieldName = truncateText(`${projectIndex}. ${contract.title}`, 256);
+          const fieldValue = [
+            `Owner: ${ownerLabel}`,
+            `Summary: ${truncateText(contract.description, 220)}`,
+            `Requirement: ${truncateText(contract.requirement, 220)}`,
+            `Artifact: ${truncateText(contract.expectedArtifact, 120)}`,
+            `Due: ${formatTokyoDate(contract.dueAt)}`,
+          ].join("\n");
+
+          embed.addFields({
+            name: fieldName,
+            value: truncateText(fieldValue, MAX_FIELD_VALUE_LENGTH),
+            inline: false,
+          });
+        }
+
+        return embed;
+      });
+
+      const shownProjects = visiblePages.reduce((count, page) => count + page.length, 0);
+      const omittedProjects = contracts.length - shownProjects;
+      if (omittedProjects > 0) {
+        embeds[embeds.length - 1].addFields({
+          name: "More Open Projects",
+          value: `${omittedProjects} additional project(s) not shown due to Discord embed limits.`,
           inline: false,
         });
       }
 
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({ embeds });
       return;
     }
 
@@ -104,7 +170,7 @@ export const projectCommand: Command = {
             { name: "Title", value: open.title, inline: false },
             { name: "Requirement", value: open.requirement, inline: false },
             { name: "Artifact", value: open.expectedArtifact, inline: false },
-            { name: "Due", value: `${formatShort(open.dueAt)} (Sao Paulo)`, inline: true },
+            { name: "Due", value: formatTokyoDate(open.dueAt), inline: true },
             { name: "Status", value: "Open", inline: true }
           );
         await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
@@ -118,7 +184,7 @@ export const projectCommand: Command = {
           .addFields(
             { name: "Title", value: delivered.title, inline: false },
             { name: "Requirement", value: delivered.requirement, inline: false },
-            { name: "Delivered At", value: delivered.deliveredAt ? `${formatShort(delivered.deliveredAt)} (Sao Paulo)` : "-", inline: true },
+            { name: "Delivered At", value: delivered.deliveredAt ? formatTokyoDate(delivered.deliveredAt) : "-", inline: true },
             { name: "Status", value: "Delivered", inline: true }
           );
         await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
@@ -155,9 +221,9 @@ export const projectCommand: Command = {
         .addFields(
           { name: "Title", value: latest.title, inline: false },
           { name: "Requirement", value: latest.requirement, inline: false },
-          { name: "Started", value: `${formatShort(latest.acceptedAt)} (Sao Paulo)`, inline: true },
-          { name: "Deadline", value: `${formatShort(latest.dueAt)} (Sao Paulo)`, inline: true },
-          { name: "Last Update", value: endAt ? `${formatShort(endAt)} (Sao Paulo)` : "-", inline: true }
+          { name: "Started", value: formatTokyoDate(latest.acceptedAt), inline: true },
+          { name: "Deadline", value: formatTokyoDate(latest.dueAt), inline: true },
+          { name: "Last Update", value: endAt ? formatTokyoDate(endAt) : "-", inline: true }
         );
       await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
       return;
@@ -180,7 +246,7 @@ export const projectCommand: Command = {
           value:
             `Requirement: ${contract.requirement}\n` +
             `Artifact: ${contract.expectedArtifact}\n` +
-            `Concluded: ${contract.concludedAt ? formatShort(contract.concludedAt) : "-"} (Sao Paulo)`,
+            `Concluded: ${contract.concludedAt ? formatTokyoDate(contract.concludedAt) : "-"}`,
           inline: false,
         });
       }
@@ -205,8 +271,11 @@ export const projectCommand: Command = {
     const description = interaction.options.getString("description", true);
     const requirement = interaction.options.getString("requirement", true);
     const artifact = interaction.options.getString("artifact", true);
-    const durationHours =
-      interaction.options.getInteger("duration_hours") ?? DEFAULT_PROJECT_DURATION_HOURS;
+    const blackholeDueAt = eligibility.member.blackholeDeadline;
+    const durationHours = Math.max(
+      1,
+      Math.ceil((new Date(blackholeDueAt).getTime() - Date.now()) / (60 * 60 * 1000))
+    );
 
     const accepted = await projectContractService.acceptContract(
       guildId,
@@ -215,7 +284,8 @@ export const projectCommand: Command = {
       description,
       requirement,
       artifact,
-      durationHours
+      durationHours,
+      blackholeDueAt
     );
     if (!accepted) {
       await interaction.reply({ embeds: [rei.error(messages.projectAlreadyDeclared())], flags: [MessageFlags.Ephemeral] });
@@ -224,7 +294,7 @@ export const projectCommand: Command = {
 
     await interaction.reply({
       embeds: [
-        rei.success(`${messages.projectDeclared(title)} Due: ${formatShort(accepted.dueAt)} (Sao Paulo).`)
+        rei.success(`${messages.projectDeclared(title)} Due: ${formatTokyoDate(accepted.dueAt)}.`)
       ],
       flags: [MessageFlags.Ephemeral],
     });

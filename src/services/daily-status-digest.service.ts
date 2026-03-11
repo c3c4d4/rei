@@ -10,7 +10,7 @@ import { projectContractService } from "./project-contract.service.js";
 
 const DAILY_DIGEST_KIND = "daily_blackhole_status";
 const DAILY_DIGEST_HOUR = 12;
-const DEFAULT_TIMEZONE = "America/Sao_Paulo";
+const DEFAULT_TIMEZONE = "Asia/Tokyo";
 const CHUNK_DESCRIPTION_LIMIT = 3600;
 const MAX_PROJECT_TITLE_LENGTH = 70;
 
@@ -27,6 +27,10 @@ type ReportPayload = {
 type MemberDigestLine = {
   daysLeft: number;
   line: string;
+};
+
+type DigestSendOptions = {
+  force?: boolean;
 };
 
 function getPart(
@@ -60,7 +64,7 @@ function getLocalTimeParts(date: Date, timezone: string): LocalTimeParts {
 
   return {
     dateKey: `${year}-${month}-${day}`,
-    hour: hourRaw,
+    hour: hourRaw % 24,
   };
 }
 
@@ -194,7 +198,10 @@ async function buildMemberLines(guildId: string): Promise<MemberDigestLine[]> {
   });
 }
 
-async function postDailyDigest(guildId: string): Promise<void> {
+async function postDailyDigest(
+  guildId: string,
+  options?: DigestSendOptions
+): Promise<void> {
   const configRows = await db
     .select({
       announcementChannelId: schema.guilds.announcementChannelId,
@@ -208,9 +215,9 @@ async function postDailyDigest(guildId: string): Promise<void> {
 
   const timezone = config.timezone ?? DEFAULT_TIMEZONE;
   const localNow = getLocalTimeParts(new Date(), timezone);
-  if (localNow.hour < DAILY_DIGEST_HOUR) return;
+  if (!options?.force && localNow.hour < DAILY_DIGEST_HOUR) return;
 
-  if (await hasDigestForDate(guildId, localNow.dateKey)) return;
+  if (!options?.force && (await hasDigestForDate(guildId, localNow.dateKey))) return;
 
   const resolved = await resolveGuildAndChannel(guildId, config.announcementChannelId);
   if (!resolved) {
@@ -229,15 +236,21 @@ async function postDailyDigest(guildId: string): Promise<void> {
   const chunks = chunkLines(printableLines, CHUNK_DESCRIPTION_LIMIT);
 
   for (let index = 0; index < chunks.length; index++) {
-    const partLabel = chunks.length > 1 ? ` | Page ${index + 1}/${chunks.length}` : "";
-    const title = `Daily Midday Status${partLabel}`;
+    const pageLabel = chunks.length > 1 ? `Page ${index + 1}/${chunks.length}` : "";
     const description =
       index === 0
-        ? `Blackhole countdown and project activity (${timezone}).\n\n${chunks[index]}`
-        : chunks[index];
+        ? [
+            `Blackhole countdown and project activity (${timezone}).`,
+            pageLabel,
+            "",
+            chunks[index],
+          ]
+            .filter((line) => line.length > 0)
+            .join("\n")
+        : [pageLabel, "", chunks[index]].filter((line) => line.length > 0).join("\n");
 
     await resolved.channel.send({
-      embeds: [rei.announcement(title, description)],
+      embeds: [rei.stateChange(description)],
       allowedMentions: { parse: [] },
     });
   }
@@ -276,6 +289,15 @@ async function maybeSendDailyDigest(guildId: string): Promise<void> {
   }
 }
 
+async function sendDailyDigestNow(guildId: string): Promise<void> {
+  try {
+    await postDailyDigest(guildId, { force: true });
+  } catch (error) {
+    logger.error("Failed to force-post daily digest.", { guildId, error: String(error) });
+  }
+}
+
 export const dailyStatusDigestService = {
   maybeSendDailyDigest,
+  sendDailyDigestNow,
 };

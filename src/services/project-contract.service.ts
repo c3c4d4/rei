@@ -1,9 +1,6 @@
-import { and, asc, desc, eq, inArray, isNull, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { addHours, now } from "../utils/time.js";
-import { PROJECT_FAILURE_PENALTY } from "../utils/constants.js";
-import { walletService } from "./wallet.service.js";
-import { logger } from "../utils/logger.js";
 
 type ProjectContract = typeof schema.projectContracts.$inferSelect;
 
@@ -227,7 +224,8 @@ async function acceptContract(
   description: string,
   requirement: string,
   expectedArtifact: string,
-  durationHours: number
+  durationHours: number,
+  dueAtOverride?: string
 ): Promise<ProjectContract | null> {
   await settleExpiredContracts(guildId);
 
@@ -235,7 +233,7 @@ async function acceptContract(
   if (active) return null;
 
   const acceptedAt = now();
-  const dueAt = addHours(new Date(acceptedAt), durationHours).toISOString();
+  const dueAt = dueAtOverride ?? addHours(new Date(acceptedAt), durationHours).toISOString();
 
   try {
     await db.insert(schema.projectContracts).values({
@@ -267,53 +265,9 @@ async function acceptContract(
 }
 
 async function settleExpiredContracts(guildId: string): Promise<number> {
-  const timestamp = now();
-  const expiredOpen = await db
-    .select()
-    .from(schema.projectContracts)
-    .where(
-      and(
-        eq(schema.projectContracts.guildId, guildId),
-        eq(schema.projectContracts.status, "open"),
-        eq(schema.projectContracts.penaltyApplied, false),
-        lt(schema.projectContracts.dueAt, timestamp)
-      )
-    );
-
-  let failedCount = 0;
-  for (const contract of expiredOpen) {
-    const claimed = await db
-      .update(schema.projectContracts)
-      .set({
-        status: "failed",
-        failedAt: timestamp,
-        penaltyApplied: true,
-      })
-      .where(
-        and(
-          eq(schema.projectContracts.id, contract.id),
-          eq(schema.projectContracts.status, "open"),
-          eq(schema.projectContracts.penaltyApplied, false)
-        )
-      )
-      .returning({ id: schema.projectContracts.id });
-    if (claimed.length === 0) continue;
-
-    await walletService.applyBalanceDelta(guildId, contract.userId, -PROJECT_FAILURE_PENALTY, {
-      cycleId: null,
-      assignmentId: null,
-      relatedUserId: null,
-      note: `project_failure:${contract.id}`,
-      entryType: "admin_adjustment",
-    });
-    failedCount++;
-  }
-
-  if (failedCount > 0) {
-    logger.info("Expired projects settled.", { guildId, failedCount });
-  }
-
-  return failedCount;
+  // Project due dates are informational only. Auto-failure is disabled.
+  void guildId;
+  return 0;
 }
 
 async function submitActiveContractDelivery(
@@ -323,12 +277,10 @@ async function submitActiveContractDelivery(
   attachmentUrls: string[] | null,
   readme: string
 ): Promise<SubmitResult> {
-  await settleExpiredContracts(guildId);
-
   const contract = await getOpenContractForUser(guildId, userId);
   if (!contract) {
     const latest = await getLatestContractForUser(guildId, userId);
-    if (latest?.status === "failed") return { kind: "overdue_failed" };
+    if (latest?.status === "failed") return { kind: "not_found" };
     if (latest?.status === "concluded") return { kind: "already_concluded", contract: latest };
     if (latest?.status === "delivered") {
       const hasActiveReview = await hasActiveReviewForContract(latest.id);
@@ -353,7 +305,7 @@ async function submitActiveContractDelivery(
       if (updatedRows.length === 0) {
         const refreshed = await getContractById(latest.id);
         if (refreshed?.status === "concluded") return { kind: "already_concluded", contract: refreshed };
-        if (refreshed?.status === "failed") return { kind: "overdue_failed" };
+        if (refreshed?.status === "failed") return { kind: "not_found" };
         if (refreshed?.status === "delivered") return { kind: "already_delivered", contract: refreshed };
         return { kind: "not_found" };
       }
@@ -366,10 +318,6 @@ async function submitActiveContractDelivery(
   }
 
   const timestamp = now();
-  if (new Date(contract.dueAt).getTime() < new Date(timestamp).getTime()) {
-    await settleExpiredContracts(guildId);
-    return { kind: "overdue_failed" };
-  }
 
   const updatedRows = await db
     .update(schema.projectContracts)
@@ -390,7 +338,7 @@ async function submitActiveContractDelivery(
     const latest = await getContractById(contract.id);
     if (latest?.status === "delivered") return { kind: "already_delivered", contract: latest };
     if (latest?.status === "concluded") return { kind: "already_concluded", contract: latest };
-    if (latest?.status === "failed") return { kind: "overdue_failed" };
+    if (latest?.status === "failed") return { kind: "not_found" };
     return { kind: "not_found" };
   }
 

@@ -16,7 +16,7 @@ REI is a Discord bot for Tomoyo Campus project execution, public peer review, an
 
 - Projects: `/project start`, `/project status`, `/project list`, `/project concluded`
 - Delivery: `/delivery submit`
-- Reviews: `/review open`, `/review claim`, `/review score`, `/review reviewer`, `/review status`, `/review log`
+- Reviews: `/review list`, `/review claim`, `/review score`, `/review reviewer`, `/review status`, `/review log`
 - Progression: `/profile status`, `/profile gift`, `/blackhole status`, `/blackhole freeze`, `/pool`
 - Admin: `/rei config ...`, `/rei state`, `/rei kickstart`
 

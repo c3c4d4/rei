@@ -9,7 +9,7 @@ export const guilds = sqliteTable("guilds", {
   reviewPeriodHours: integer("review_period_hours").notNull().default(168),
   cycleStartDayOfWeek: integer("cycle_start_day_of_week").notNull().default(1),
   cycleStartHour: integer("cycle_start_hour").notNull().default(9),
-  timezone: text("timezone").notNull().default("America/Sao_Paulo"),
+  timezone: text("timezone").notNull().default("Asia/Tokyo"),
   activeRoleId: text("active_role_id"),
   observerRoleId: text("observer_role_id"),
   createdAt: text("created_at").notNull(),

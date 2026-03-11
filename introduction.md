@@ -54,8 +54,12 @@ Create strong builders and reviewers by making project delivery and review quali
 
 Each delivery must include:
 
-- README content (required)
-- At least one artifact (link or attachment)
+- At least one attached file (README/artifact format is evaluator-reviewed)
+
+Optional:
+
+- A project link
+- Extra README/context text
 
 README criteria are validated by the evaluator during review. Attach `README_TEMPLATE.md` to guide submissions.
 

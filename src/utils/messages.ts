@@ -1,13 +1,13 @@
 export const messages = {
   projectDeclared: (title: string) => `Project started: ${title}.`,
   projectAlreadyDeclared: () => `You already have an active project (open or waiting review).`,
-  deliverySubmitted: () => `Project delivery submitted. It is now available in /review open.`,
+  deliverySubmitted: () => `Project delivery submitted. It is now available in /review list.`,
   deliveryAlreadySubmitted: () => `This project is already delivered.`,
   reviewSubmitted: () => `Review submitted.`,
   reviewFlowHint: () =>
     `Use the thread for conversation. Evaluator closes with /review score, then evaluatee rates reviewer quality with /review reviewer.`,
   noProjectDeclared: () => `No open project found.`,
-  provideInput: () => `Provide a link or at least one file.`,
+  provideInput: () => `Attach at least one file to submit delivery.`,
   configUpdated: () => `Configuration updated.`,
   internalError: () => `Internal error. Logged.`,
   projectOverdueFailed: () => `Project deadline passed. The project failed and points were deducted.`,

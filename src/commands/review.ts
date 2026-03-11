@@ -18,6 +18,9 @@ import { requireGuild } from "../utils/permissions.js";
 import { formatShort } from "../utils/time.js";
 
 const THREAD_MESSAGE_LIMIT = 1900;
+const DISPLAY_TIMEZONE_LABEL = "Asia/Tokyo";
+const README_PREVIEW_LIMIT = 700;
+const MAX_FILES_PER_MESSAGE = 10;
 
 function truncateThreadMessage(content: string): { content: string; truncated: boolean } {
   if (content.length <= THREAD_MESSAGE_LIMIT) {
@@ -30,6 +33,22 @@ function truncateThreadMessage(content: string): { content: string; truncated: b
     content: `${content.slice(0, safeLength)}${suffix}`,
     truncated: true,
   };
+}
+
+function formatDisplayDate(iso: string): string {
+  return `${formatShort(iso)} (${DISPLAY_TIMEZONE_LABEL})`;
+}
+
+function sanitizeForCodeFence(text: string): string {
+  return text.replace(/```/g, "'''");
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
 }
 
 async function postToThread(
@@ -51,7 +70,7 @@ export const review: Command = {
     .setDescription("Public review sessions.")
     .addSubcommand((sub) =>
       sub
-        .setName("open")
+        .setName("list")
         .setDescription("List delivered projects waiting for review claim.")
         .addIntegerOption((opt) =>
           opt
@@ -170,7 +189,7 @@ export const review: Command = {
       reviewThreadService.settleExpiredReviewDeadlines(guildId),
     ]);
 
-    if (subcommand === "open") {
+    if (subcommand === "list") {
       const limit = interaction.options.getInteger("limit") ?? 20;
       const delivered = await projectContractService.listDeliveredContracts(guildId, 100);
       const claimable: typeof delivered = [];
@@ -184,20 +203,20 @@ export const review: Command = {
 
       if (claimable.length === 0) {
         await interaction.reply({
-          embeds: [rei.info("Review Open", "No projects are currently waiting for review claim.")],
+          embeds: [rei.info("Review List", "No projects are currently waiting for review claim.")],
           flags: [MessageFlags.Ephemeral],
         });
         return;
       }
 
-      const embed = rei.info("Review Open", `${claimable.length} project(s) available to claim.`);
+      const embed = rei.info("Review List", `${claimable.length} project(s) available to claim.`);
       for (const contract of claimable) {
         embed.addFields({
           name: `Project #${contract.id} - ${contract.title}`,
           value:
             `Owner: <@${contract.userId}>\n` +
             `Requirement: ${contract.requirement}\n` +
-            `Delivered: ${contract.deliveredAt ? `${formatShort(contract.deliveredAt)} (Sao Paulo)` : "-"}\n` +
+            `Delivered: ${contract.deliveredAt ? formatDisplayDate(contract.deliveredAt) : "-"}\n` +
             `Claim: \`/review claim project_id:${contract.id}\``,
           inline: false,
         });
@@ -220,7 +239,7 @@ export const review: Command = {
       const embed = rei.info("Review Status", `${sessions.length} active review session(s).`);
       for (const session of sessions) {
         const contract = await projectContractService.getContractById(session.contractId);
-        const due = session.reviewDueAt ? `${formatShort(session.reviewDueAt)} (Sao Paulo)` : "-";
+        const due = session.reviewDueAt ? formatDisplayDate(session.reviewDueAt) : "-";
         embed.addFields({
           name: `Session #${session.id}`,
           value:
@@ -312,8 +331,8 @@ export const review: Command = {
         const projectScore = session.projectScore !== null ? `${session.projectScore}/5` : "-";
         const difficulty = session.difficulty !== null ? `${session.difficulty}/5` : "-";
         const reviewerScore = session.reviewerScore !== null ? `${session.reviewerScore}/5` : "-";
-        const closedAt = session.closedAt ? `${formatShort(session.closedAt)} (Sao Paulo)` : "-";
-        const due = session.reviewDueAt ? `${formatShort(session.reviewDueAt)} (Sao Paulo)` : "-";
+        const closedAt = session.closedAt ? formatDisplayDate(session.closedAt) : "-";
+        const due = session.reviewDueAt ? formatDisplayDate(session.reviewDueAt) : "-";
 
         embed.addFields({
           name: `Project #${session.contractId} - ${contract?.title ?? "Unknown"}`,
@@ -452,52 +471,84 @@ export const review: Command = {
         `Project ID: ${contract.id}`,
         `Evaluatee: <@${contract.userId}>`,
         `Evaluator: <@${userId}>`,
-        `Review due: ${session.reviewDueAt ? `${formatShort(session.reviewDueAt)} (Sao Paulo)` : "-"}`,
+        `Review due: ${session.reviewDueAt ? formatDisplayDate(session.reviewDueAt) : "-"}`,
         `Requirement: ${contract.requirement}`,
         `Expected artifact: ${contract.expectedArtifact}`,
+        "",
+        "Conversation is open to the community in this thread.",
+        "Reviewer validates submitted files (README criteria included) and project quality.",
+        `Reviewer closes with: \`/review score project_id:${contract.id} score:<0-5> difficulty:<1-5>\``,
+        `Evaluatee rates reviewer with: \`/review reviewer project_id:${contract.id} user:<@${userId}> score:<0-5> comments:<text>\``,
+        "If review deadline expires (24h), evaluatee is refunded and reviewer loses 1 point.",
       ];
+
+      const detailLines: string[] = [];
+      let decodedDelivery: ReturnType<typeof projectContractService.decodeDeliveryPayload> | null = null;
       if (contract.deliveryLink) {
-        lines.push(`Delivery link: ${contract.deliveryLink}`);
+        detailLines.push(`Delivery link: ${contract.deliveryLink}`);
       }
       if (contract.deliveryAttachmentUrl) {
-        const decoded = projectContractService.decodeDeliveryPayload(contract.deliveryAttachmentUrl);
-        decoded.attachments.forEach((url, idx) => lines.push(`Attachment ${idx + 1}: ${url}`));
-        if (decoded.legacyAttachmentText) {
-          lines.push(`Attachment: ${decoded.legacyAttachmentText}`);
+        decodedDelivery = projectContractService.decodeDeliveryPayload(contract.deliveryAttachmentUrl);
+        if (decodedDelivery.legacyAttachmentText) {
+          detailLines.push(`Attachment: ${decodedDelivery.legacyAttachmentText}`);
         }
-        if (decoded.readme) {
-          const trimmed = decoded.readme.trim();
-          const maxPreviewLength = 1200;
+        if (decodedDelivery.readme) {
+          const trimmed = decodedDelivery.readme.trim();
           const preview =
-            trimmed.length > maxPreviewLength
-              ? `${trimmed.slice(0, maxPreviewLength)}\n\n[README preview truncated]`
+            trimmed.length > README_PREVIEW_LIMIT
+              ? `${trimmed.slice(0, README_PREVIEW_LIMIT)}\n\n[README preview truncated]`
               : trimmed;
-          lines.push("");
-          lines.push("README:");
-          lines.push("```md");
-          lines.push(preview);
-          lines.push("```");
+          if (preview.length > 0) {
+            detailLines.push("");
+            detailLines.push("README preview:");
+            detailLines.push("```md");
+            detailLines.push(sanitizeForCodeFence(preview));
+            detailLines.push("```");
+          }
         }
       }
-      lines.push("");
-      lines.push("Conversation is open to the community in this thread.");
-      lines.push("Reviewer validates README criteria and project quality.");
-      lines.push(
-        `Reviewer closes with: \`/review score project_id:${contract.id} score:<0-5> difficulty:<1-5>\``
-      );
-      lines.push(
-        `Evaluatee rates reviewer with: \`/review reviewer project_id:${contract.id} user:<@${userId}> score:<0-5> comments:<text>\``
-      );
-      lines.push("If review deadline expires (24h), evaluatee is refunded and reviewer loses 1 point.");
 
       const threadBody = truncateThreadMessage(lines.join("\n"));
       await thread.send({ content: threadBody.content, allowedMentions: { parse: [] } });
-      if (threadBody.truncated) {
-        await thread.send({
-          content:
-            "Some delivery details were truncated due Discord limits. Evaluatee can resubmit delivery updates before a new review cycle.",
-          allowedMentions: { parse: [] },
-        });
+
+      if (decodedDelivery?.attachments.length) {
+        const attachmentBatches = chunkArray(decodedDelivery.attachments, MAX_FILES_PER_MESSAGE);
+        let sentAllAttachments = true;
+
+        for (let i = 0; i < attachmentBatches.length; i++) {
+          const batch = attachmentBatches[i];
+          const start = i * MAX_FILES_PER_MESSAGE + 1;
+          const end = Math.min(start + batch.length - 1, decodedDelivery.attachments.length);
+          const label =
+            attachmentBatches.length > 1
+              ? `Submitted delivery files (${start}-${end} of ${decodedDelivery.attachments.length}):`
+              : "Submitted delivery file(s):";
+
+          try {
+            await thread.send({ content: label, files: batch, allowedMentions: { parse: [] } });
+          } catch {
+            sentAllAttachments = false;
+            break;
+          }
+        }
+
+        if (!sentAllAttachments) {
+          detailLines.push("Could not re-attach one or more files directly. Fallback URLs:");
+          decodedDelivery.attachments.forEach((url, idx) => detailLines.push(`Attachment ${idx + 1}: ${url}`));
+        }
+      }
+
+      if (detailLines.length > 0) {
+        const detailBody = truncateThreadMessage(detailLines.join("\n"));
+        await thread.send({ content: detailBody.content, allowedMentions: { parse: [] } });
+
+        if (detailBody.truncated) {
+          await thread.send({
+            content:
+              "Some delivery details were trimmed due Discord message limits. Use submitted links/files for full context.",
+            allowedMentions: { parse: [] },
+          });
+        }
       }
 
       await interaction.editReply({

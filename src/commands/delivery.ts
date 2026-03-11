@@ -15,18 +15,11 @@ export const deliveryCommand: Command = {
       sub
         .setName("submit")
         .setDescription("Submit your project delivery.")
-        .addStringOption((opt) =>
-          opt
-            .setName("readme")
-            .setDescription("README.md content (validated by evaluator during review).")
-            .setRequired(true)
-            .setMaxLength(4000)
-        )
-        .addStringOption((opt) =>
-          opt.setName("link").setDescription("Artifact link.").setRequired(false)
-        )
         .addAttachmentOption((opt) =>
-          opt.setName("file1").setDescription("Artifact file.").setRequired(false)
+          opt
+            .setName("file1")
+            .setDescription("Delivery file (README or artifact).")
+            .setRequired(true)
         )
         .addAttachmentOption((opt) =>
           opt.setName("file2").setDescription("Second file (optional).").setRequired(false)
@@ -36,6 +29,16 @@ export const deliveryCommand: Command = {
         )
         .addAttachmentOption((opt) =>
           opt.setName("file4").setDescription("Fourth file (optional).").setRequired(false)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("readme")
+            .setDescription("Optional README or delivery context text.")
+            .setRequired(false)
+            .setMaxLength(4000)
+        )
+        .addStringOption((opt) =>
+          opt.setName("link").setDescription("Optional project link.").setRequired(false)
         )
     ),
 
@@ -57,7 +60,7 @@ export const deliveryCommand: Command = {
     }
 
     const link = interaction.options.getString("link");
-    const readme = interaction.options.getString("readme", true);
+    const readme = interaction.options.getString("readme") ?? "";
     const attachments = [
       interaction.options.getAttachment("file1"),
       interaction.options.getAttachment("file2"),
@@ -65,7 +68,7 @@ export const deliveryCommand: Command = {
       interaction.options.getAttachment("file4"),
     ].filter((a): a is NonNullable<typeof a> => a !== null);
 
-    if (!link && attachments.length === 0) {
+    if (attachments.length === 0) {
       await interaction.reply({ embeds: [rei.error(messages.provideInput())], flags: [MessageFlags.Ephemeral] });
       return;
     }
@@ -75,7 +78,7 @@ export const deliveryCommand: Command = {
       guildId,
       userId,
       link,
-      attachmentUrls.length > 0 ? attachmentUrls : null,
+      attachmentUrls,
       readme
     );
 

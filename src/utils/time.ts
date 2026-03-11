@@ -1,4 +1,4 @@
-const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
+const TOKYO_TIMEZONE = "Asia/Tokyo";
 
 export function now(): string {
   return new Date().toISOString();
@@ -32,7 +32,7 @@ export function msUntil(iso: string): number {
 
 export function formatShort(iso: string): string {
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: SAO_PAULO_TIMEZONE,
+    timeZone: TOKYO_TIMEZONE,
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -43,7 +43,7 @@ export function formatShort(iso: string): string {
 
 export function formatDate(iso: string): string {
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: SAO_PAULO_TIMEZONE,
+    timeZone: TOKYO_TIMEZONE,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
